@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f2" />
+    <meta name="description" content="A little time for yourself. Discover thoughtful cuts, beautiful color, and book your next visit at ERD Hair Design." />
+    <title>ERD Hair Design — A little time for you</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="header">
+      <a class="brand" href="#book" aria-label="ERD Hair Design home"><span class="brand-word">erd<span>.</span></span><span class="brand-caption">HAIR DESIGN</span></a>
+      <nav aria-label="Main navigation"><a href="#book" data-nav="book">Book a visit</a><a href="#services" data-nav="services">Our services</a><a href="#studio" data-nav="studio">The studio</a></nav>
+      <div id="account-nav"><button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button></div>
+    </header>
+    <main id="main"><div class="initial-loading"><span class="loader"></span><p>Making a little space for you…</p></div></main>
+    <footer class="footer"><a class="footer-logo" href="#book">erd.</a><p>Good hair. A little more you.</p><span>© <span id="year"></span> ERD Hair Design</span><button class="text-button" data-action="admin-entry">Salon admin <span aria-hidden="true">↗</span></button></footer>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <dialog id="modal" aria-labelledby="modal-title"></dialog>
+    <noscript>This booking website needs JavaScript enabled to display availability and manage appointments.</noscript>
+  </body>
+</html>

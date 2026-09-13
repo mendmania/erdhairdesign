@@ -1,0 +1,13 @@
+# Allowlist: credentials, local databases, and Git history never enter the build.
+**
+!package.json
+!server.mjs
+!lib/
+!lib/**
+!public/
+!public/**
+!scripts/
+!scripts/admin.mjs
+!scripts/k3s.mjs
+!tests/
+!tests/**
