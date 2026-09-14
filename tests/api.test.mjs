@@ -126,3 +126,51 @@ for (const trustProxy of [false, true]) {
     }
   });
 }
+
+test('super admin requires email verification and alone can grant or revoke administrators', async t => {
+  const {db,request,signUp}=await fixture(t);
+  const client=await signUp();await request('/api/auth/verify','POST',{code:client.body.devCode});
+  const owner=await request('/api/auth/register','POST',{name:'Salon Owner',phone:'+38112345678',email:'mendmania@gmail.com',password:'owner-test-password'});
+  assert.equal(owner.body.user.role,'client');
+  assert.equal((await request('/api/admin/dashboard')).status,403);
+  const verified=await request('/api/auth/verify','POST',{code:owner.body.devCode});
+  assert.equal(verified.body.user.role,'super_admin');
+  assert.equal((await request('/api/admin/dashboard')).body.admins[0].email,'mendmania@gmail.com');
+  assert.equal((await request('/api/admin/team','PUT',{email:'mendmania@gmail.com',role:'client'})).status,403);
+  assert.equal((await request('/api/admin/team','PUT',{email:'test@example.test',role:'super_admin'})).status,400);
+  assert.equal((await request('/api/admin/team','PUT',{email:'missing@example.test',role:'admin'})).status,404);
+  assert.equal((await request('/api/admin/team','PUT',{email:'test@example.test',role:'admin'})).status,200);
+  assert.equal(db.prepare('SELECT count(*) n FROM sessions WHERE user_id=?').get(client.body.user.id).n,0);
+  await request('/api/auth/login','POST',{email:'test@example.test',password:'a-test-password-only'});
+  assert.equal((await request('/api/admin/dashboard')).body.admins,undefined);
+  assert.equal((await request('/api/admin/team','PUT',{email:'mendmania@gmail.com',role:'client'})).status,403);
+  const settings=(await request('/api/admin/dashboard')).body.settings;
+  assert.equal((await request('/api/admin/settings','PUT',{...settings,allowOutside:false})).status,200);
+  await request('/api/auth/login','POST',{email:'mendmania@gmail.com',password:'owner-test-password'});
+  assert.equal((await request('/api/admin/team','PUT',{email:'test@example.test',role:'client'})).status,200);
+  await request('/api/auth/login','POST',{email:'test@example.test',password:'a-test-password-only'});
+  assert.equal((await request('/api/admin/dashboard')).status,403);
+});
+test('admin can manage service menu and time off through HTTP; clients cannot', async t => {
+  const {db,request,signUp}=await fixture(t);const user=await signUp();
+  await request('/api/auth/verify','POST',{code:user.body.devCode});
+  const service={name:'Simple cut',description:'A fresh look.',duration:30,price:2500,outside_price:3500,category:'Cut & style'};
+  const date=addDays((await request('/api/bootstrap')).body.today,2);
+  const vacation={startDate:date,endDate:date,label:'Holiday'};
+  assert.equal((await request('/api/admin/services','POST',service)).status,403);
+  assert.equal((await request('/api/admin/vacations','POST',vacation)).status,403);
+  db.prepare("UPDATE users SET role='admin' WHERE id=?").run(user.body.user.id);
+  const created=await request('/api/admin/services','POST',service);assert.equal(created.status,201);
+  const id=created.body.service.id;
+  assert.equal((await request(`/api/admin/services/${id}`,'PUT',{...service,price:2700})).body.service.price,2700);
+  assert.ok((await request('/api/bootstrap')).body.services.some(s=>s.id===id));
+  const off=await request('/api/admin/vacations','POST',vacation);assert.equal(off.status,201);
+  assert.deepEqual((await request(`/api/availability?service=${id}&date=${date}`)).body.slots,[]);
+  assert.equal((await request('/api/admin/dashboard')).body.vacations[0].label,'Holiday');
+  assert.equal((await request(`/api/admin/vacations/${off.body.vacation.id}`,'DELETE',{})).status,200);
+  assert.ok((await request(`/api/availability?service=${id}&date=${date}`)).body.slots.length);
+  assert.equal((await request(`/api/admin/services/${id}`,'DELETE',{})).status,200);
+  assert.ok(!(await request('/api/bootstrap')).body.services.some(s=>s.id===id));
+  assert.equal((await request(`/api/availability?service=${id}&date=${date}`)).status,400);
+  assert.equal((await request(`/api/admin/services/${id}`,'PUT',service)).status,404);
+});

@@ -1,3 +1,5 @@
+import { isAdmin, isSuperAdmin } from './lib/roles.mjs';
+import { setAdmin, addVacation, saveService, removeService } from './lib/admin.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -72,7 +74,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       const route = `${req.method} ${url.pathname}`;
       if (route === 'GET /api/bootstrap') {
         const settings = settingsFor(db);
-        return json({ services: db.prepare('SELECT * FROM services').all(), settings, user: publicUser(user), today: localDate(Date.now(), settings.timezone), development: !production && !apiKey });
+        return json({ services: db.prepare('SELECT * FROM services WHERE active = 1').all(), settings, user: publicUser(user), today: localDate(Date.now(), settings.timezone), development: !production && !apiKey });
       }
       if (route === 'GET /api/availability') return json(availability(db, url.searchParams.get('service'), url.searchParams.get('date')));
       if (route === 'POST /api/auth/register') {
@@ -114,15 +116,27 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       if (req.method === 'POST' && /^\/api\/bookings\/[^/]+\/action$/.test(url.pathname)) {
         requireUser(); return json({ booking: changeBooking(db, user, url.pathname.split('/')[3], input.action) });
       }
-      if (url.pathname.startsWith('/api/admin/')) { requireUser(); demand(user.role === 'admin' && user.verified, 'Admin access is required.', 403); }
+      if (url.pathname.startsWith('/api/admin/')) { requireUser(); demand(isAdmin(user) && user.verified, 'Admin access is required.', 403); }
       if (route === 'GET /api/admin/dashboard') {
-        return json({ bookings: db.prepare('SELECT b.*, u.name, u.email, u.phone, u.approvals FROM bookings b JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC').all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services').all() });
+        return json({ bookings: db.prepare('SELECT b.*, u.name, u.email, u.phone, u.approvals FROM bookings b JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC').all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services WHERE active = 1').all(), vacations: db.prepare('SELECT * FROM vacations ORDER BY start_date').all(), ...(isSuperAdmin(user) ? { admins: db.prepare("SELECT id,name,email,role FROM users WHERE role IN ('admin','super_admin') ORDER BY role DESC,name").all() } : {}) });
       }
       if (route === 'PUT /api/admin/settings') return json({ settings: updateSettings(db, input) });
+      if (route === 'PUT /api/admin/team') return json(setAdmin(db, user, input.email, input.role));
+      if (route === 'POST /api/admin/vacations') return json({ vacation: addVacation(db, input) }, 201);
+      if (req.method === 'DELETE' && /^\/api\/admin\/vacations\/[^/]+$/.test(url.pathname)) {
+        demand(db.prepare('DELETE FROM vacations WHERE id = ?').run(url.pathname.split('/')[4]).changes, 'Time off not found.', 404);
+        return json({ ok: true });
+      }
+      if (route === 'POST /api/admin/services') return json({ service: saveService(db, null, input) }, 201);
+      if (/^\/api\/admin\/services\/[^/]+$/.test(url.pathname)) {
+        const id = url.pathname.split('/')[4];
+        if (req.method === 'PUT') return json({ service: saveService(db, id, input) });
+        if (req.method === 'DELETE') return json(removeService(db, id));
+      }
       if (route === 'PUT /api/admin/prices') {
         demand(Array.isArray(input.services), 'Provide service prices.');
         transaction(db, () => {
-          const all = db.prepare('SELECT id FROM services').all();
+          const all = db.prepare('SELECT id FROM services WHERE active = 1').all();
           demand(input.services.length === all.length && new Set(input.services.map(s => s.id)).size === all.length, 'Provide each service exactly once.');
           for (const s of input.services) {
             demand(all.some(a => a.id === s.id), 'Unknown service.');
@@ -130,7 +144,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
             db.prepare('UPDATE services SET price = ?, outside_price = ? WHERE id = ?').run(s.price, s.outside_price, s.id);
           }
         });
-        return json({ services: db.prepare('SELECT * FROM services').all() });
+        return json({ services: db.prepare('SELECT * FROM services WHERE active = 1').all() });
       }
       throw new AppError('Not found.', 404);
     } catch (error) {

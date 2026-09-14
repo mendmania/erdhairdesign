@@ -3274,3 +3274,23 @@ dialog .modal-description {
     scroll-behavior:auto!important
   }
 }
+
+/* Salon workspace: compact controls that remain usable on small screens. */
+.admin-tabs { flex-wrap: wrap; gap: 8px; }
+.admin-section-heading, .admin-item { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.admin-section-heading { margin-bottom: 24px; }
+.admin-section-heading .button { flex-shrink: 0; }
+.admin-items { display: grid; gap: 12px; margin-top: 28px; }
+.admin-item { border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.admin-item h3 { margin: 0 0 8px; }
+.admin-item p { margin: 4px 0; overflow-wrap: anywhere; }
+.admin-item-actions { display: flex; gap: 18px; align-items: center; }
+.owner-badge { font-size: 12px; font-weight: 600; color: var(--green); white-space: nowrap; }
+#vacation-form, #team-form { display: grid; gap: 16px; max-width: 620px; }
+#service-form .field-grid { gap: 16px; }
+@media (max-width: 600px) {
+  .admin-section-heading, .admin-item { align-items: stretch; flex-direction: column; gap: 16px; }
+  .admin-item > .text-button { align-self: flex-start; }
+  .admin-tabs button { flex: 1 1 auto; padding: 12px; }
+  #service-form .field-grid { grid-template-columns: 1fr; }
+}

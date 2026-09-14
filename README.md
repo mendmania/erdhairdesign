@@ -12,23 +12,25 @@ npm run dev
 
 Open [localhost:3000](http://localhost:3000). The SQLite database is created automatically in `data/salon.sqlite`. `npm start` runs the server without file watching. Refresh the browser after frontend edits.
 
-Copy `.env.example` to `.env` to customize configuration. Defaults are EUR, Europe/Belgrade salon time, and a local-only server at `127.0.0.1:3000`. The services, prices, and weekly hours are starter content; edit prices and hours in the admin workspace before using the app with clients. The salon photo is a remote Unsplash placeholder, and fonts load from Google Fonts.
+Copy `.env.example` to `.env` to customize configuration. Defaults are EUR, Europe/Belgrade salon time, and a local-only server at `127.0.0.1:3000`. The services, prices, and weekly hours are starter content; configure the service menu and hours in the admin workspace before using the app with clients. The salon photo is a remote Unsplash placeholder, and fonts load from Google Fonts.
 
 The supplied **01-modern** brand set is stored unchanged in `public/brand`. The website uses the black horizontal logo in its header/footer, the stacked black logo in account dialogs, and the white mark on the booking photo. Supplied favicons, Apple touch icon, and app icons are wired into the page and `site.webmanifest`. Social previews use the supplied light sharing image, with absolute URLs generated from `APP_URL`; no deployment hostname is hardcoded. The alternate white logos, dark sharing image, and social profile image are retained for later use. These supplied assets contain branding, not salon photography.
 
 ## Your admin account
 
-1. Use **Sign in → Create an account** to register.
-2. Verify your email. With no email provider configured in development, the verification dialog clearly displays a local test code; **no email is sent**.
-3. Grant your verified account admin access from the repository:
+The verified account **mendmania@gmail.com** is the protected super admin. Existing verified accounts with that email are promoted automatically on startup; a new account must verify its email before receiving this role. Refresh after deployment, sign in, and open **Salon admin** in the footer or [the admin workspace](https://tregubio.com/#admin).
 
-   ```sh
-   npm run admin -- your@email.com
-   ```
+Only the super admin sees **Administrators** and can grant or revoke admin access for other registered, verified users. Access changes invalidate that person's existing sessions; they sign in again to use their new role. The owner cannot be removed, demoted, or have its identity changed through the application. SQLite triggers also reject ordinary deletion/demotion queries. These protections do not supersede an infrastructure operator who can replace code or alter the database schema.
 
-4. Refresh the browser, then choose **Salon admin** in the footer or **Your account → Salon workspace**.
+Administrators can manage:
 
-There are no default accounts, shared admin passwords, or public admin registration endpoints. The command requires local database access and will not grant access to an unverified account.
+- **Appointments:** approve, decline, cancel, and complete visits.
+- **Working hours:** the shared salon's weekly shifts and optional outside-hours request window.
+- **Time off:** inclusive date ranges for vacations, holidays, or single days. Time off blocks every new booking, including outside-hours requests. Existing active appointments must be resolved first; they are never silently cancelled.
+- **Services & prices:** add, edit, or remove services, with duration, category, description, and separate in-hours/outside-hours prices. Removed services disappear from the menu; existing appointments retain their agreed details and history. Starter services are not restored on restart.
+- **Booking rules:** automatic approval, the initial approval count, and outside-hours review.
+
+There are no default accounts or shared admin passwords. For local database maintenance, `npm run admin -- your@email.com` still promotes a verified account; it preserves the protected owner's super-admin role. The site uses one shared salon calendar, not individual stylist calendars.
 
 ## Booking behavior
 
@@ -49,7 +51,7 @@ There are no default accounts, shared admin passwords, or public admin registrat
 
 A repeat is one active appointment, renewed **after the admin marks the previous visit complete**. Supported intervals are 1, 2, 4, 6, or 8 weeks. Each renewal uses the same weekday, time, service, and notes, and follows the current approval rules.
 
-Future repeats do not reserve an entire series of slots in advance. If the next slot conflicts, working hours no longer allow it, or the price changes, renewal pauses with an explanation on the completed visit. The client can then make a new booking. Cancelling the active appointment stops its repeat schedule. Late completion skips elapsed occurrences and schedules the next future occurrence.
+Future repeats do not reserve an entire series of slots in advance. If the next slot conflicts, working hours no longer allow it, the service is removed, the salon is on vacation, or the price changes, renewal pauses with an explanation on the completed visit. The client can then make a new booking. Cancelling the active appointment stops its repeat schedule. Late completion skips elapsed occurrences and schedules the next future occurrence.
 
 ## Live email and production
 
@@ -75,7 +77,7 @@ Use persistent storage for the SQLite database and back it up. Run a single appl
 
 Passwords use salted scrypt hashes. Sessions use random, hashed server-side tokens with HttpOnly, SameSite cookies and Secure cookies in production. Verification codes expire after 10 minutes, allow five attempts, and have a one-minute resend cooldown. Mutations enforce origin checks; admin endpoints enforce role and verification server-side. Booking creation and changes use SQLite transactions.
 
-This initial scope includes **verification email only**. Appointment updates are displayed in My visits; automated appointment emails, password recovery, multiple stylists, holidays/date-specific shift overrides, and payments can be added later. Replace starter branding, imagery, and service content with the salon’s real details before launch.
+This initial scope includes **verification email only**. Appointment updates are displayed in My visits; automated appointment emails, password recovery, multiple stylists, date-specific shift overrides, and payments can be added later. Replace starter branding, imagery, and service content with the salon’s real details before launch.
 
 ## Verification
 
@@ -84,7 +86,7 @@ npm run check
 npm test
 ```
 
-The tests cover HTTP registration/sign-in/sign-out, email verification limits, Brevo request formatting and delivery failures, permissions, price updates, conflicts, the two-approval threshold, repeat renewal and pause behavior, cancellation, timezone/DST handling, and production configuration. Tests use isolated in-memory databases, mocked email delivery, and local temporary HTTP ports; no real emails are sent. In a restrictive sandbox, permit local listening ports to run the API tests.
+The tests cover HTTP registration/sign-in/sign-out, email verification limits, Brevo request formatting and delivery failures, protected-owner migrations, admin delegation and session revocation, service management, vacation conflicts and recurring closures, permissions, price updates, conflicts, the two-approval threshold, repeat renewal and pause behavior, cancellation, timezone/DST handling, and production configuration. Tests use isolated in-memory databases, mocked email delivery, and local temporary HTTP ports; no real emails are sent. In a restrictive sandbox, permit local listening ports to run the API tests.
 
 The customer registration-to-booking flow and admin approval/settings screens were also checked in the browser, with a 390px mobile layout and no horizontal overflow.
 
@@ -95,6 +97,8 @@ server.mjs             HTTP server, API routes, security headers, static assets
 lib/store.mjs          SQLite schema and starter data
 lib/auth.mjs           Passwords, sessions, registration, email verification
 lib/booking.mjs        Availability, bookings, repeat rules, settings validation
+lib/admin.mjs          Administrator access, vacations, service management
+lib/roles.mjs          Reserved owner identity and role checks
 public/index.html     Website shell
 public/app.js         Customer flow, account dialogs, admin workspace
 public/style.css      Responsive design and reduced-motion-aware animations
