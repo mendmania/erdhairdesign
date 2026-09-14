@@ -1,4 +1,4 @@
-import { albanian } from './locales/sq.js?v=20260914-modern';
+import { albanian } from './locales/sq.js?v=20260914-routes';
 let language = 'en';
 export const getLanguage = () => language;
 export const locale = () => language === 'sq' ? 'sq-AL' : 'en-GB';

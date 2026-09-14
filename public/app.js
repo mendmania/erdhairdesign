@@ -1,5 +1,6 @@
-import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260914-modern';
-import { selectAppointments } from './admin-view.js?v=20260914-modern';
+import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260914-routes';
+import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260914-routes';
+import { selectAppointments } from './admin-view.js?v=20260914-routes';
 try { setLanguage(localStorage.getItem('erd-language') || (navigator.language.startsWith('sq') ? 'sq' : 'en')); } catch {}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -32,7 +33,7 @@ const service = () => state.services.find(s => s.id === state.serviceId);
 const dateLabel = formatDate;
 const dayAfter = (date, days) => { const d = new Date(h`${date}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const duration = m => m >= 60 ? h`${Math.floor(m / 60)} hr${m % 60 ? h` ${m % 60} min` : ''}` : h`${m} min`;
-let toastTimer, availabilityRequest = 0, modalReturnFocus, renderedRoute, renderedStep;
+let toastTimer, availabilityRequest = 0, modalReturnFocus, renderedRoute, renderedStep, renderedLanguage, accountMarkup, routeRequest = 0;
 const motion = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
 function focusBookingStep() { const title = $('#step-content h2'); title?.setAttribute('tabindex', '-1'); title?.focus({preventScroll:true}); $('#booking-panel')?.scrollIntoView({behavior:motion(),block:'start'}); }
 
@@ -46,29 +47,63 @@ function toast(message) { $('#toast').textContent = t(message); $('#toast').clas
 function updateNav() {
   document.documentElement.lang = getLanguage();
   document.title = getLanguage() === 'sq' ? 'ERD Hair Design — Pak kohë për ju' : 'ERD Hair Design — A little time for you';
-  document.querySelectorAll('[data-i18n]').forEach(el => { el.dataset.i18nSource ||= el.innerHTML; el.innerHTML = h(el.dataset.i18nSource); });
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.dataset.i18nSource ||= el.innerHTML; const copy = h(el.dataset.i18nSource); if (el.innerHTML !== copy) el.innerHTML = copy; });
   document.querySelectorAll('[data-i18n-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
   document.querySelectorAll('[data-nav]').forEach(a => { const current = a.dataset.nav === state.route; a.classList.toggle('active', current); current ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
-  $('#account-nav').innerHTML = state.user ? h`${isStaff() ? h('<a class="account-link workspace-link" href="#admin">Workspace</a>') : ''}<a class="account-link" href="#appointments">${icon('calendar')}<span>My visits</span></a><button class="avatar" data-action="account" aria-label="Your account">${esc(state.user.name.slice(0, 1))}</button>` : h`<button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button>`;
-  $('#account-nav').insertAdjacentHTML('afterbegin', languageControl());
+  const account = languageControl() + (state.user ? h`${isStaff() ? h('<a class="account-link workspace-link" href="/admin">Workspace</a>') : ''}<a class="account-link" href="/appointments">${icon('calendar')}<span>My visits</span></a><button class="avatar" data-action="account" aria-label="Your account">${esc(state.user.name.slice(0, 1))}</button>` : h`<button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button>`);
+  if (account !== accountMarkup) { $('#account-nav').innerHTML = account; accountMarkup = account; }
 }
 function languageControl() { return `<label class="language-control"><span class="sr-only">${t('Language')}</span><select id="language-select" aria-label="${t('Language')}"><option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option><option value="sq" ${getLanguage() === 'sq' ? 'selected' : ''}>Shqip</option></select></label>`; }
-function render() {
+function updateBooking(html, selectionOnly) {
+  const template = document.createElement('template'); template.innerHTML = html;
+  const fresh = template.content;
+  const oldStep = $('#step-content');
+  const sameStep = renderedStep === state.step;
+  const openDetails = sameStep ? [...oldStep.querySelectorAll('details[open]')].map(el => el.className) : [];
+  const dateScroll = oldStep.querySelector('.date-strip')?.scrollLeft || 0;
+  const selectors = selectionOnly ? ['.visit-summary', '.selection-total'] : ['.stepper', '#step-content', '.booking-bottom', '.visit-summary', '.aside-note'];
+  for (const selector of selectors) {
+    const old = $(selector), next = fresh.querySelector(selector);
+    if (selector === '#step-content' && sameStep) next.classList.remove('step-enter');
+    if (old && next) { if (old.outerHTML !== next.outerHTML) old.replaceWith(next); }
+    else if (old) old.remove();
+    else if (next && selector === '.booking-bottom') $('#booking-panel').append(next);
+  }
+  if (selectionOnly) {
+    document.querySelectorAll('.time-slot').forEach(el => { const selected = el.dataset.time === state.slot?.time; el.classList.toggle('selected', selected); el.setAttribute('aria-pressed', String(selected)); });
+    const next = $('[data-action="next"]'); if (next) next.disabled = !state.slot || state.slotsLoading;
+  } else if (sameStep) {
+    for (const cls of openDetails) $('#step-content details.' + CSS.escape(cls))?.setAttribute('open', '');
+    const dates = $('#step-content .date-strip'); if (dates) dates.scrollLeft = dateScroll;
+  }
+}
+function render({ selectionOnly = false } = {}) {
   const focused = document.activeElement;
-  const focusSelector = focused?.dataset.action ? Object.entries(focused.dataset)
+  const focusSelector = focused?.id ? '#' + CSS.escape(focused.id) : focused?.dataset.action ? Object.entries(focused.dataset)
     .filter(([key]) => key !== 'busy')
     .map(([key, value]) => h`[data-${key.replace(/[A-Z]/g, c => h`-${c.toLowerCase()}`)}="${CSS.escape(value)}"]`).join('') : null;
   updateNav();
   const main = $('#main');
-  if (state.route === 'book') main.innerHTML = bookingPage();
+  if (state.route === 'book') {
+    if (renderedRoute === 'book' && renderedLanguage === getLanguage() && $('#booking-panel')) updateBooking(bookingPage(), selectionOnly);
+    else main.innerHTML = bookingPage();
+  }
   if (state.route === 'services') main.innerHTML = servicesPage();
   if (state.route === 'studio') main.innerHTML = studioPage();
   if (state.route === 'appointments') main.innerHTML = appointmentsPage();
-  if (state.route === 'admin') main.innerHTML = adminPage();
+  if (state.route === 'admin') {
+    const template = document.createElement('template'); template.innerHTML = adminPage();
+    const old = main.querySelector('.admin-page'), next = template.content.querySelector('.admin-page');
+    if (old && next && renderedLanguage === getLanguage()) {
+      const children = [...next.children];
+      children.forEach((child, i) => { const previous = old.children[i]; if (previous?.outerHTML !== child.outerHTML) { if (previous) previous.replaceWith(child); else old.append(child); } });
+      while (old.children.length > children.length) old.lastElementChild.remove();
+    } else main.replaceChildren(template.content);
+  }
   // Animate navigation, not every time or date selection.
   if (renderedRoute === state.route) main.querySelector('.page-enter')?.classList.remove('page-enter');
   if (renderedRoute === state.route && renderedStep === state.step) main.querySelector('.step-enter')?.classList.remove('step-enter');
-  renderedRoute = state.route; renderedStep = state.step;
+  renderedRoute = state.route; renderedStep = state.step; renderedLanguage = getLanguage();
   if (!$('#modal').open && focusSelector) {
     const replacement = $(focusSelector);
     if (replacement && !replacement.disabled) replacement.focus({ preventScroll: true });
@@ -118,7 +153,7 @@ function timeStep() {
 function slotButton(s) { return h`<button class="time-slot ${state.slot?.time === s.time ? 'selected' : ''}" data-action="time" data-time="${s.time}" ${!s.available ? 'disabled' : ''} aria-pressed="${state.slot?.time === s.time}">${s.time}${!s.available ? h('<span class="sr-only"> unavailable</span>') : ''}</button>`; }
 function detailsStep() {
   return h`<div class="section-title"><div><p class="eyebrow">03 / YOUR DETAILS</p><h2>Your details.</h2><p>A few details, so we’re ready to welcome you.</p></div></div>
-    ${!state.user ? h`<div class="account-gate"><span class="gate-icon">${icon('user')}</span><h3>Your good hair days start here.</h3><p>Create an account and verify your email to book.<br>Already part of the studio? Welcome back.</p><button class="button button-primary" data-action="register">Create an account ${icon('arrow')}</button><p class="signin-caption">Already have an account? <button class="text-button" data-action="login">Sign in</button></p><span class="gate-assurance">${icon('shield')} Your details stay private and secure.</span></div>` : !state.user.verified ? h`<div class="account-gate"><span class="gate-icon">${icon('mail')}</span><h3>One small step: verify your email.</h3><p>Confirm ${esc(state.user.email)} to book your visit.</p><button class="button button-primary" data-action="verify-open">Verify email ${icon('arrow')}</button></div>` : h`<form id="details-form" class="details-form"><div class="verified-banner">${icon('shield')} Email verified <span>${esc(state.user.email)}</span></div><div class="field-grid"><label>Full name<input name="name" autocomplete="name" value="${esc(state.user.name)}" required minlength="2" maxlength="100" placeholder="Your full name"/></label><label>Phone number<input name="phone" type="tel" autocomplete="tel" value="${esc(state.user.phone)}" required placeholder="+381 …"/></label></div><label>Anything we should know? <span class="optional">Optional</span><textarea name="notes" maxlength="1000" rows="2" placeholder="Your hair goals, preferences, or anything that helps us make your visit feel like you.">${esc(state.notes)}</textarea></label><p class="form-error" id="form-error" role="alert"></p><div class="form-footer"><button type="button" class="text-button" data-action="step" data-step="1">← Back</button><button class="button button-primary" type="submit">Review your visit ${icon('arrow')}</button></div></form>`}`;
+    ${!state.user ? h`<div class="account-gate"><span class="gate-icon">${icon('user')}</span><h3>Your good hair days start here.</h3><p>Create an account and verify your email to book.<br>Already part of the studio? Welcome back.</p><button class="button button-primary" data-action="register">Create an account ${icon('arrow')}</button><p class="signin-caption">Already have an account? <button class="text-button" data-action="login">Sign in</button></p><span class="gate-assurance">${icon('shield')} Your details stay private and secure.</span></div>` : !state.user.verified ? h`<div class="account-gate"><span class="gate-icon">${icon('mail')}</span><h3>One small step: verify your email.</h3><p>Confirm ${esc(state.user.email)} to book your visit.</p><button class="button button-primary" data-action="verify-open">Verify email ${icon('arrow')}</button></div>` : h`<form id="details-form" class="details-form"><div class="verified-banner">${icon('shield')} Email verified <span>${esc(state.user.email)}</span></div><div class="field-grid"><label>Full name<input name="name" autocomplete="name" value="${esc(state.detailsDraft?.name ?? state.user.name)}" required minlength="2" maxlength="100" placeholder="Your full name"/></label><label>Phone number<input name="phone" type="tel" autocomplete="tel" value="${esc(state.detailsDraft?.phone ?? state.user.phone)}" required placeholder="+381 …"/></label></div><label>Anything we should know? <span class="optional">Optional</span><textarea name="notes" maxlength="1000" rows="2" placeholder="Your hair goals, preferences, or anything that helps us make your visit feel like you.">${esc(state.notes)}</textarea></label><p class="form-error" id="form-error" role="alert"></p><div class="form-footer"><button type="button" class="text-button" data-action="step" data-step="1">← Back</button><button class="button button-primary" type="submit">Review your visit ${icon('arrow')}</button></div></form>`}`;
 }
 function confirmStep() {
   const pending = !state.settings.autoApprove || state.user.approvals < state.settings.requiredApprovals || (state.slot.outside && state.settings.outsideApproval);
@@ -130,9 +165,9 @@ function confirmStep() {
     <div class="form-footer"><button class="text-button" data-action="step" data-step="2">← Back</button><button class="button button-primary" data-action="book">${pending ? h('Request appointment') : h('Confirm appointment')} ${icon('arrow')}</button></div>`;
 }
 function servicesPage() { return h`<section class="content-page page-enter">${heading(t('THOUGHTFUL HAIR, BEAUTIFULLY DONE'), h('Find your <em>fresh start.</em>'), h('Considered cuts, expressive color, and care that goes a little deeper.'))}<div class="catalog-grid">${state.services.map(s => serviceCard(s, true)).join('')}</div><div class="info-box">${icon('sun')}<div><strong>A little flexibility for your schedule.</strong><p>Outside-hours appointments are available by request, with the price shown before you book.</p></div></div></section>`; }
-function studioPage() { return h`<section class="content-page page-enter">${heading(t('WELCOME TO ERD'), h('A space to feel <em>like you.</em>'), h('Good hair begins with a little care. And a little time to slow down.'))}<div class="studio-layout"><img class="studio-large" src="https://images.unsplash.com/photo-1600948836101-f9ffda59d250?auto=format&fit=crop&w=1200&q=85" alt="An inviting salon interior"/><div class="studio-story"><p class="eyebrow">LESS RUSH. MORE YOU.</p><h2>A good conversation.<br>A thoughtful cut.<br>A fresh perspective.</h2><p>We believe your appointment should feel as good as your hair looks. A chance to settle in, tell us what you have in mind, and leave feeling a little more yourself.</p><h3>Our usual hours</h3><div class="hours-list">${state.settings.shifts.map(s => h`<div><span>${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[s.day]}</span><span>${s.open ? h`${s.start} – ${s.end}` : h('Closed')}</span></div>`).join('')}</div><p class="fine-print">Times shown in ${esc(state.settings.timezone)}.${state.settings.allowOutside ? h(' Need something outside these hours? Explore available requests when booking.') : ''}</p><a class="button button-primary" href="#book">Make time for you ${icon('arrow')}</a></div></div></section>`; }
+function studioPage() { return h`<section class="content-page page-enter">${heading(t('WELCOME TO ERD'), h('A space to feel <em>like you.</em>'), h('Good hair begins with a little care. And a little time to slow down.'))}<div class="studio-layout"><img class="studio-large" src="https://images.unsplash.com/photo-1600948836101-f9ffda59d250?auto=format&fit=crop&w=1200&q=85" alt="An inviting salon interior"/><div class="studio-story"><p class="eyebrow">LESS RUSH. MORE YOU.</p><h2>A good conversation.<br>A thoughtful cut.<br>A fresh perspective.</h2><p>We believe your appointment should feel as good as your hair looks. A chance to settle in, tell us what you have in mind, and leave feeling a little more yourself.</p><h3>Our usual hours</h3><div class="hours-list">${state.settings.shifts.map(s => h`<div><span>${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[s.day]}</span><span>${s.open ? h`${s.start} – ${s.end}` : h('Closed')}</span></div>`).join('')}</div><p class="fine-print">Times shown in ${esc(state.settings.timezone)}.${state.settings.allowOutside ? h(' Need something outside these hours? Explore available requests when booking.') : ''}</p><a class="button button-primary" href="/book">Make time for you ${icon('arrow')}</a></div></div></section>`; }
 function appointmentsPage() {
-  return h`<section class="content-page page-enter">${heading(t('YOUR TIME AT ERD'), h('A little something to <em>look forward to.</em>'), h('Your upcoming moment, and all the good hair days before it.'))}${!state.user ? h`<div class="empty-state">${icon('calendar')}<h2>Your visits live here.</h2><p>Sign in to see your appointments and manage your routine.</p><button class="button button-primary" data-action="login">Sign in ${icon('arrow')}</button></div>` : !state.bookings.length ? h`<div class="empty-state">${icon('calendar')}<h2>Your first good hair day is waiting.</h2><p>Choose a service, find your time, and we’ll take it from there.</p><a class="button button-primary" href="#book">Book your first visit ${icon('arrow')}</a></div>` : h`<div class="appointment-list">${state.bookings.map(b => appointmentCard(b)).join('')}</div>`}</section>`;
+  return h`<section class="content-page page-enter">${heading(t('YOUR TIME AT ERD'), h('A little something to <em>look forward to.</em>'), h('Your upcoming moment, and all the good hair days before it.'))}${!state.user ? h`<div class="empty-state">${icon('calendar')}<h2>Your visits live here.</h2><p>Sign in to see your appointments and manage your routine.</p><button class="button button-primary" data-action="login">Sign in ${icon('arrow')}</button></div>` : !state.bookings.length ? h`<div class="empty-state">${icon('calendar')}<h2>Your first good hair day is waiting.</h2><p>Choose a service, find your time, and we’ll take it from there.</p><a class="button button-primary" href="/book">Book your first visit ${icon('arrow')}</a></div>` : h`<div class="appointment-list">${state.bookings.map(b => appointmentCard(b)).join('')}</div>`}</section>`;
 }
 function appointmentCard(b, admin = false) {
   const active = ['pending', 'confirmed'].includes(b.status);
@@ -219,24 +254,52 @@ async function loadSlots() {
   } finally { if (request === availabilityRequest) { state.slotsLoading = false; render(); } }
 }
 async function route() {
-  state.route = ['book', 'services', 'studio', 'appointments', 'admin'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'book';
-  if (state.route === 'appointments' && state.user) state.bookings = (await api('/bookings')).bookings;
-  if (state.route === 'admin') { const session = await api('/bootstrap'); state.user = session.user; state.today = session.today; state.admin = null; }
-  if (state.route === 'admin' && isStaff()) { state.admin = await api('/admin/dashboard'); state.services = state.admin.services; state.settings = state.admin.settings; if (!service()) { state.step = 0; state.slot = null; } }
+  const request = ++routeRequest;
+  const page = pages[pagePath(location.pathname)] || pages['/'];
+  let session, admin, bookings;
+  if (page.name === 'appointments' && state.user) bookings = (await api('/bookings')).bookings;
+  if (page.name === 'admin') {
+    session = await api('/bootstrap');
+    if (session.user?.verified && ['admin', 'super_admin'].includes(session.user.role)) admin = await api('/admin/dashboard');
+  }
+  if (request !== routeRequest) return false;
+  state.route = page.name;
+  if (bookings) state.bookings = bookings;
+  if (session) { state.user = session.user; state.today = session.today; state.admin = admin || null; }
+  if (page.adminTab) state.adminTab = page.adminTab;
+  if (admin) { state.services = admin.services; state.settings = admin.settings; if (!service()) { state.step = 0; state.slot = null; } }
   render();
+  return true;
+}
+function migrateHash() {
+  const path = legacyPath(location.hash);
+  if (path) history.replaceState(null, '', path + location.search);
+  return Boolean(path);
+}
+async function navigate(path, {replace = false} = {}) {
+  const previousPage = state.route;
+  const url = new URL(path, location.origin);
+  if (!pagePath(url.pathname) || url.origin !== location.origin) return;
+  if (url.pathname + url.search !== location.pathname + location.search) history[replace ? 'replaceState' : 'pushState'](null, '', url.pathname + url.search);
+  if (await route()) {
+    if (previousPage === 'admin' && state.route === 'admin') return;
+    if (state.route === 'book' && state.step > 0) focusBookingStep();
+    else window.scrollTo({top:0,behavior:motion()});
+  }
 }
 async function afterAuth() {
   if (state.user && !state.user.verified) { verifyModal(); render(); return; }
   closeModal();
-  if (state.authIntent === 'admin') { state.authIntent = null; location.hash = 'admin'; }
+  if (state.authIntent === 'admin') { state.authIntent = null; await navigate('/admin'); return; }
   await route();
 }
 async function action(button) {
   const a = button.dataset.action;
   if (a === 'category') { state.category = button.dataset.value; render(); }
   if (a === 'service' || a === 'pick-service') {
+    routeRequest++;
     state.serviceId = button.dataset.id; state.slot = null; state.step = 1; state.route = 'book';
-    if (location.hash !== '#book') location.hash = 'book';
+    if (location.pathname !== '/book') history.pushState(null, '', '/book');
     render(); await loadSlots(); if (state.step === 1) focusBookingStep();
   }
   if (a === 'next') { if (!state.slot || state.slotsLoading) return; state.step = 2; render(); focusBookingStep(); }
@@ -246,18 +309,18 @@ async function action(button) {
     state.slot = null; await loadSlots();
   }
   if (a === 'retry-slots') await loadSlots();
-  if (a === 'time') { if (state.slotsLoading) return; state.slot = state.slots.find(s => s.time === button.dataset.time && s.available); render(); }
+  if (a === 'time') { if (state.slotsLoading) return; state.slot = state.slots.find(s => s.time === button.dataset.time && s.available); render({selectionOnly:true}); }
   if (a === 'login' || a === 'register') authModal(a);
   if (a === 'modal-close') closeModal();
   if (a === 'verify-open') verifyModal();
   if (a === 'resend') { const result = await api('/auth/resend', 'POST', {}); state.devCode = result.devCode; verifyModal(); toast(state.devCode ? h('A new local verification code is ready.') : h('A new code is on its way.')); }
-  if (a === 'account') openModal(h`<p class="eyebrow">YOUR LITTLE CORNER</p><h2 id="modal-title">Hello, ${esc(state.user.name.split(' ')[0])}.</h2><p class="modal-description">${esc(state.user.email)} · ${state.user.verified ? h('Verified') : h('Not yet verified')}</p><div class="account-menu"><a class="button button-outline" href="#appointments" data-action="modal-close">${icon('calendar')} My visits</a>${!state.user.verified ? h('<button class="button button-outline" data-action="verify-open">Verify email</button>') : ''}${isStaff() ? h('<a class="button button-outline" href="#admin" data-action="modal-close">Salon workspace ↗</a>') : ''}<button class="text-button" data-action="logout">Sign out</button></div>`);
-  if (a === 'logout') { await api('/auth/logout', 'POST', {}); state.user = null; state.devCode = null; state.bookings = []; state.admin = null; if (state.step > 2) state.step = 2; closeModal(); await route(); toast(h('You’re signed out. See you soon.')); }
-  if (a === 'admin-entry') { if (state.user) { if (location.hash === '#admin') await route(); else location.hash = 'admin'; } else { state.authIntent = 'admin'; authModal(); } }
+  if (a === 'account') openModal(h`<p class="eyebrow">YOUR LITTLE CORNER</p><h2 id="modal-title">Hello, ${esc(state.user.name.split(' ')[0])}.</h2><p class="modal-description">${esc(state.user.email)} · ${state.user.verified ? h('Verified') : h('Not yet verified')}</p><div class="account-menu"><a class="button button-outline" href="/appointments" data-action="modal-close">${icon('calendar')} My visits</a>${!state.user.verified ? h('<button class="button button-outline" data-action="verify-open">Verify email</button>') : ''}${isStaff() ? h('<a class="button button-outline" href="/admin" data-action="modal-close">Salon workspace ↗</a>') : ''}<button class="text-button" data-action="logout">Sign out</button></div>`);
+  if (a === 'logout') { await api('/auth/logout', 'POST', {}); state.user = null; state.detailsDraft = null; state.devCode = null; state.bookings = []; state.admin = null; if (state.step > 2) state.step = 2; closeModal(); await route(); toast(h('You’re signed out. See you soon.')); }
+  if (a === 'admin-entry') { if (state.user) { await navigate('/admin'); } else { state.authIntent = 'admin'; authModal(); } }
   if (a === 'book') {
     const { booking } = await api('/bookings', 'POST', { serviceId: state.serviceId, date: state.date, time: state.slot.time, repeatWeeks: state.repeatWeeks, notes: state.notes, expectedPrice: state.slot.price });
     state.step = 0; state.serviceId = null; state.slot = null; state.repeatWeeks = 0; state.notes = '';
-    location.hash = 'appointments';
+    await navigate('/appointments');
     openModal(h`<span class="success-circle">${icon('check')}</span><p class="eyebrow">A LITTLE TIME FOR YOU</p><h2 id="modal-title">${booking.status === 'pending' ? h('Your request is in.') : h('It’s a date.')}</h2><p class="modal-description">${booking.status === 'pending' ? h('Our team will review your appointment. You can follow its status in My visits.') : h('Your appointment is confirmed. We look forward to seeing you.')}</p><div class="success-detail"><strong>${esc(bookingName(booking))}</strong><span>${dateLabel(booking.date)} · ${booking.time}</span><span>${money(booking.price)} · Pay at the salon</span></div><button class="button button-primary full-width" data-action="modal-close">Lovely, thank you ${icon('check')}</button>`);
   }
   if (a === 'cancel-open') openModal(h`<p class="eyebrow">A CHANGE OF PLANS</p><h2 id="modal-title">Cancel this visit?</h2><p class="modal-description">We’ll free up your time for someone else. Any repeat schedule for this visit will stop, too.</p><button class="button button-primary full-width" data-action="booking-action" data-value="cancel" data-id="${button.dataset.id}">Yes, cancel my visit</button><button class="text-button full-width cancel-keep" data-action="modal-close">Keep my appointment</button>`);
@@ -269,7 +332,7 @@ async function action(button) {
   if (a === 'vacation-remove') { await api(h`/admin/vacations/${button.dataset.id}`, 'DELETE', {}); closeModal(); await route(); toast(h('Time off removed.')); }
   if (a === 'admin-remove-open') openModal(h`<h2 id="modal-title">Remove admin access?</h2><p class="modal-description">${esc(button.dataset.email)} will keep their client account and appointments. Their administrator access will end immediately.</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="admin-remove" data-email="${esc(button.dataset.email)}">Remove admin access</button><button class="text-button full-width cancel-keep" data-action="modal-close">Keep access</button>`);
   if (a === 'admin-remove') { await api('/admin/team', 'PUT', {email: button.dataset.email, role: 'client'}); closeModal(); await route(); toast(h('Administrator access removed.')); }
-  if (a === 'admin-view') { state.adminTab = 'appointments'; state.adminFilter = button.dataset.view; state.adminQuery = ''; state.adminDate = ''; render(); }
+  if (a === 'admin-view') { state.adminTab = 'appointments'; state.adminFilter = button.dataset.view; state.adminQuery = ''; state.adminDate = ''; if (location.pathname !== '/admin') await navigate('/admin'); else render(); }
   if (a === 'admin-clear') { state.adminQuery = ''; state.adminDate = ''; render(); }
   if (a === 'copy-weekdays') { const form = $('#hours-form'); for (let day = 2; day <= 5; day++) { form.elements[h`open-${day}`].checked = form.elements['open-1'].checked; form.elements[h`start-${day}`].value = form.elements['start-1'].value; form.elements[h`end-${day}`].value = form.elements['end-1'].value; } toast(h('Monday copied to Tuesday–Friday. Save working hours to apply.')); }
   if (['admin-decline-open','admin-cancel-open','admin-complete-open'].includes(a)) {
@@ -277,10 +340,21 @@ async function action(button) {
     const value = a === 'admin-decline-open' ? 'decline' : a === 'admin-cancel-open' ? 'cancel' : 'complete';
     openModal(h`<h2 id="modal-title">${value === 'complete' ? h('Complete this repeat visit?') : value === 'decline' ? h('Decline this request?') : h('Cancel this visit?')}</h2><p class="modal-description"><strong>${esc(b.name)}</strong><br>${esc(bookingName(b))} · ${dateLabel(b.date)} at ${b.time}</p><p class="modal-description">${value === 'complete' ? h('This finishes the visit and requests the next repeat, subject to availability and booking rules.') : h('The time will be released and any repeat schedule will stop. The client can see the update in My visits.')}</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="booking-action" data-value="${value}" data-id="${b.id}">${value === 'complete' ? h('Complete & renew repeat') : value === 'decline' ? h('Decline request') : h('Cancel visit')}</button><button class="text-button full-width cancel-keep" data-action="modal-close">Go back</button>`);
   }
-  if (a === 'admin-tab') { state.adminTab = button.dataset.tab; render(); }
+  if (a === 'admin-tab') await navigate(adminPath(button.dataset.tab));
   if (a === 'refresh-admin') { await route(); toast(h('Your appointment book is up to date.')); }
 }
 document.addEventListener('click', async event => {
+  const link = event.target.closest('a[href]');
+  if (link && !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && !link.hasAttribute('download') && !link.hasAttribute('data-reload') && (!link.target || link.target === '_self')) {
+    const url = new URL(link.href, location.href);
+    if (url.origin === location.origin && pagePath(url.pathname) && !url.hash) {
+      event.preventDefault();
+      if ($('#modal').open) closeModal();
+      try { await navigate(url.pathname + url.search); } catch (error) { toast(error.message); }
+      return;
+    }
+  }
+  if (link && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
   const button = event.target.closest('[data-action]');
   if (!button || button.disabled) return;
   const anchor = button.tagName === 'A';
@@ -301,12 +375,12 @@ document.addEventListener('change', async event => {
       $('#language-select').focus({preventScroll:true});
     }
     if (event.target.id === 'date-picker') { const date = event.target.value; if (date < state.today || date > dayAfter(state.today, 90)) throw new Error(h('Choose a date within the next 90 days.')); state.date = date; state.slot = null; await loadSlots(); render(); }
-    if (event.target.id === 'repeat-weeks') { state.repeatWeeks = Number(event.target.value); render(); $('#repeat-weeks').focus({preventScroll:true}); }
+    if (event.target.id === 'repeat-weeks') { state.repeatWeeks = Number(event.target.value); render({selectionOnly:true}); $('#repeat-weeks').focus({preventScroll:true}); }
     if (event.target.id === 'admin-date') { state.adminDate = event.target.value; $('#admin-results').innerHTML = adminResults(); }
   } catch (error) { toast(error.message); }
 });
 document.addEventListener('invalid', event => { const el = event.target; if (getLanguage() === 'sq' && el.setCustomValidity) el.setCustomValidity(t(el.validity.valueMissing ? 'Complete this field.' : el.type === 'email' ? 'Enter a valid email address.' : 'Check this value and try again.')); }, true);
-document.addEventListener('input', event => { event.target.setCustomValidity?.(''); if (event.target.name === 'notes') state.notes = event.target.value; if (event.target.id === 'admin-search') { state.adminQuery = event.target.value; $('#admin-results').innerHTML = adminResults(); } });
+document.addEventListener('input', event => { event.target.setCustomValidity?.(''); if (event.target.form?.id === 'details-form' && ['name', 'phone'].includes(event.target.name)) state.detailsDraft = {...state.detailsDraft, [event.target.name]:event.target.value}; if (event.target.name === 'notes') state.notes = event.target.value; if (event.target.id === 'admin-search') { state.adminQuery = event.target.value; $('#admin-results').innerHTML = adminResults(); } });
 document.addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.target, submit = $('button[type="submit"], button.button-primary', form);
@@ -315,9 +389,9 @@ document.addEventListener('submit', async event => {
   const data = Object.fromEntries(new FormData(form));
   const errorField = $('.form-error', form); if (errorField) errorField.textContent = '';
   try {
-    if (form.id === 'auth-form') { const result = await api(h`/auth/${state.authMode}`, 'POST', data); state.user = result.user; state.devCode = result.devCode; if (result.emailError) toast(result.emailError); await afterAuth(); }
+    if (form.id === 'auth-form') { const result = await api(h`/auth/${state.authMode}`, 'POST', data); state.user = result.user; state.detailsDraft = null; state.devCode = result.devCode; if (result.emailError) toast(result.emailError); await afterAuth(); }
     if (form.id === 'verify-form') { const result = await api('/auth/verify', 'POST', data); state.user = result.user; state.devCode = null; await afterAuth(); toast(h('Email verified. You’re ready to book.')); }
-    if (form.id === 'details-form') { state.user = (await api('/profile', 'PATCH', data)).user; state.notes = data.notes; state.step = 3; render(); focusBookingStep(); }
+    if (form.id === 'details-form') { state.user = (await api('/profile', 'PATCH', data)).user; state.notes = data.notes; state.detailsDraft = null; state.step = 3; render(); focusBookingStep(); }
     if (form.id === 'hours-form' || form.id === 'rules-form') {
       const s = structuredClone(state.admin.settings);
       if (form.id === 'hours-form') { s.allowOutside = data.allowOutside === 'on'; s.outsideStart = data.outsideStart; s.outsideEnd = data.outsideEnd; s.shifts = s.shifts.map(d => ({ day: d.day, open: data[h`open-${d.day}`] === 'on', start: data[h`start-${d.day}`], end: data[h`end-${d.day}`] })); }
@@ -332,7 +406,9 @@ document.addEventListener('submit', async event => {
   finally { if (submit) { submit.disabled = false; submit.removeAttribute('aria-busy'); } }
 });
 $('#modal').addEventListener('click', event => { if (event.target === $('#modal')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) closeModal(); } });
-window.addEventListener('hashchange', () => { route().then(() => { if (state.route === 'book' && state.step > 0) focusBookingStep(); else window.scrollTo({top:0,behavior:motion()}); }).catch(e => toast(e.message)); });
+window.addEventListener('popstate', () => { migrateHash(); route().catch(e => toast(e.message)); });
+window.addEventListener('hashchange', () => { if (migrateHash()) route().catch(e => toast(e.message)); });
+migrateHash();
 $('#year').textContent = new Date().getFullYear();
 try { Object.assign(state, await api('/bootstrap')); state.date = state.today; await route(); }
-catch (error) { $('#main').innerHTML = h`<div class="empty-state"><h1>We’ll be right with you.</h1><p>${esc(error.message)}</p><a class="button button-primary" href="/">Try again</a></div>`; }
+catch (error) { $('#main').innerHTML = h`<div class="empty-state"><h1>We’ll be right with you.</h1><p>${esc(error.message)}</p><a class="button button-primary" href="/" data-reload>Try again</a></div>`; }

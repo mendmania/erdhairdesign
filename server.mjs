@@ -1,3 +1,4 @@
+import { pagePath } from './public/routes.js';
 import { isAdmin, isSuperAdmin } from './lib/roles.mjs';
 import { setAdmin, addVacation, saveService, removeService } from './lib/admin.mjs';
 import { createServer } from 'node:http';
@@ -47,7 +48,12 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       }
       if (!url.pathname.startsWith('/api/')) {
         demand(req.method === 'GET' || req.method === 'HEAD', 'Method not allowed.', 405);
-        const path = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+        const page = pagePath(url.pathname);
+        if ((page && page !== url.pathname) || url.pathname === '/index.html') {
+          res.writeHead(308, { Location: (page || '/book') + url.search, 'Cache-Control': 'no-cache' });
+          return res.end();
+        }
+        const path = page ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
         const file = resolve(root, path);
         demand(file.startsWith(root) && !path.includes('..'), 'Not found.', 404);
         let content;

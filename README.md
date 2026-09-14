@@ -26,7 +26,7 @@ UI translations are in `public/locales/sq.js`. The `h` template helper translate
 
 ## Your admin account
 
-The verified account **mendmania@gmail.com** is the protected super admin. Existing verified accounts with that email are promoted automatically on startup; a new account must verify its email before receiving this role. Refresh after deployment, sign in, and open **Salon admin** in the footer or [the admin workspace](https://tregubio.com/#admin).
+The verified account **mendmania@gmail.com** is the protected super admin. Existing verified accounts with that email are promoted automatically on startup; a new account must verify its email before receiving this role. Refresh after deployment, sign in, and open **Salon admin** in the footer or [the admin workspace](https://tregubio.com/admin).
 
 Only the super admin sees **Administrators** and can grant or revoke admin access for other registered, verified users. Access changes invalidate that person's existing sessions; they sign in again to use their new role. The owner cannot be removed, demoted, or have its identity changed through the application. SQLite triggers also reject ordinary deletion/demotion queries. These protections do not supersede an infrastructure operator who can replace code or alter the database schema.
 
@@ -104,6 +104,12 @@ The interface takes its charcoal, muted gold and editorial typography direction 
 
 Main actions and time slots have 52px or larger targets. Form text remains at least 16px to avoid input-triggered mobile zoom; pinch zoom remains available. Mobile booking actions stay in view, and page transitions respect reduced-motion preferences. Update the asset version in index.html and module imports when publishing interface changes so Cloudflare/browser caches pick them up.
 
+## Page URLs and navigation
+
+Pages use `/book`, `/services`, `/studio`, `/appointments`, and `/admin`. Admin sections also have direct links: `/admin/working-hours`, `/admin/time-off`, `/admin/services`, `/admin/booking-rules`, and `/admin/team`. Each path supports direct loads and browser refresh. Old `/#book` style links are converted in the browser.
+
+Normal internal links use browser history without reloading the document. Back/Forward and opening links in another tab work normally. Booking selections update the relevant controls and summary while retaining the page shell, header, photos and unsaved details. The server uses an explicit page allowlist; unknown pages, assets, and API routes remain 404 responses.
+
 ## Files
 
 ```text
@@ -114,6 +120,7 @@ lib/booking.mjs        Availability, bookings, repeat rules, settings validation
 lib/admin.mjs          Administrator access, vacations, service management
 lib/roles.mjs          Reserved owner identity and role checks
 public/index.html     Website shell
+public/routes.js      Shared page allowlist and clean URL mappings
 public/app.js         Customer flow, account dialogs, admin workspace
 public/style.css      Responsive design and reduced-motion-aware animations
 scripts/admin.mjs     Local-only admin promotion command

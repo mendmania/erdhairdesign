@@ -174,3 +174,20 @@ test('admin can manage service menu and time off through HTTP; clients cannot', 
   assert.equal((await request(`/api/availability?service=${id}&date=${date}`)).status,400);
   assert.equal((await request(`/api/admin/services/${id}`,'PUT',service)).status,404);
 });
+
+test('clean page URLs load directly while unknown pages and API authorization stay intact', async t => {
+  const { url, request } = await fixture(t);
+  for (const path of ['/', '/book', '/services', '/studio', '/appointments', '/admin', '/admin/working-hours', '/admin/time-off', '/admin/services', '/admin/booking-rules', '/admin/team']) {
+    const response = await fetch(url + path);
+    assert.equal(response.status, 200, path);
+    assert.match(response.headers.get('content-type'), /text\/html/);
+    assert.match(await response.text(), /src="\/app\.js\?v=/);
+  }
+  for (const path of ['/services/', '/admin/working-hours/']) {
+    const response = await fetch(url + path + '?lang=sq', { redirect: 'manual' });
+    assert.equal(response.status, 308);
+    assert.equal(response.headers.get('location'), path.slice(0, -1) + '?lang=sq');
+  }
+  for (const path of ['/not-a-page', '/missing.js', '/admin/missing', '/api/missing']) assert.equal((await fetch(url + path)).status, 404, path);
+  assert.equal((await request('/api/admin/dashboard')).status, 401);
+});

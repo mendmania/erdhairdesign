@@ -30,18 +30,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,wght@0,600;0,700;0,800;1,600;1,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/style.css?v=20260914-modern" />
-    <script type="module" src="/app.js?v=20260914-modern"></script>
+    <link rel="stylesheet" href="/style.css?v=20260914-routes" />
+    <script type="module" src="/app.js?v=20260914-routes"></script>
   </head>
   <body>
     <a data-i18n class="skip-link" href="#main">Skip to content</a>
     <header class="header">
-      <a class="brand" href="#book" data-i18n-label="ERD Hair Design home" aria-label="ERD Hair Design home"><img class="header-brand-image" src="/brand/logos/logo-horizontal-black.png" width="1102" height="245" alt="ERD hair design" fetchpriority="high" /></a>
-      <nav data-i18n-label="Main navigation" aria-label="Main navigation"><a href="#book" data-i18n data-nav="book">Book a visit</a><a href="#services" data-i18n data-nav="services">Our services</a><a href="#studio" data-i18n data-nav="studio">The studio</a></nav>
+      <a class="brand" href="/book" data-i18n-label="ERD Hair Design home" aria-label="ERD Hair Design home"><img class="header-brand-image" src="/brand/logos/logo-horizontal-black.png" width="1102" height="245" alt="ERD hair design" fetchpriority="high" /></a>
+      <nav data-i18n-label="Main navigation" aria-label="Main navigation"><a href="/book" data-i18n data-nav="book">Book a visit</a><a href="/services" data-i18n data-nav="services">Our services</a><a href="/studio" data-i18n data-nav="studio">The studio</a></nav>
       <div id="account-nav"><button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button></div>
     </header>
     <main id="main"><div class="initial-loading"><span class="loader"></span><p>Making a little space for you…</p></div></main>
-    <footer class="footer"><a class="footer-logo" href="#book" data-i18n-label="ERD Hair Design home" aria-label="ERD Hair Design home"><img src="/brand/logos/logo-horizontal-black.png" width="1102" height="245" alt="ERD hair design" loading="lazy" /></a><p data-i18n>Good hair. A little more you.</p><span>© <span id="year"></span> ERD Hair Design</span><button class="text-button" data-i18n data-action="admin-entry">Salon admin <span aria-hidden="true">↗</span></button></footer>
+    <footer class="footer"><a class="footer-logo" href="/book" data-i18n-label="ERD Hair Design home" aria-label="ERD Hair Design home"><img src="/brand/logos/logo-horizontal-black.png" width="1102" height="245" alt="ERD hair design" loading="lazy" /></a><p data-i18n>Good hair. A little more you.</p><span>© <span id="year"></span> ERD Hair Design</span><button class="text-button" data-i18n data-action="admin-entry">Salon admin <span aria-hidden="true">↗</span></button></footer>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <dialog id="modal" aria-labelledby="modal-title"></dialog>
     <noscript>This booking website needs JavaScript enabled to display availability and manage appointments.</noscript>
