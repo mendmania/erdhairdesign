@@ -1,9 +1,9 @@
 {
-  "sourceCommit": "d3c96c08ceff4752be2818f5b0c11c46dcd341ec",
-  "image": "ghcr.io/mendmania/erdhairdesign@sha256:27eae78f26bcf2293de0d40038b0946df1b0eebd600fd2bf84213f4161800b51",
+  "sourceCommit": "b9b5f94310b6c881aff4a16608942ca037e1f08c",
+  "image": "ghcr.io/mendmania/erdhairdesign@sha256:5a1db39536e0d96af18760d3fe4331401349ab5f2a5ca2e10755231fe2642504",
   "platform": "linux/amd64",
-  "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34835762006",
-  "tests": 54,
+  "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34838717477",
+  "tests": 59,
   "clusterFoundation": "created",
   "applicationRollout": "live at https://tregubio.com",
   "anonymousPull": true,
@@ -14,9 +14,9 @@
   "edgeConfigMap": "erdhairdesign-edge-497262a88fcc",
   "previousEdgeConfigMap": "erdhairdesign-edge-5d58ba402184",
   "cloudflareProxy": true,
-  "deploymentTests": 54,
+  "deploymentTests": 59,
   "ownerRole": "mendmania@gmail.com verified as protected super_admin",
-  "databaseBackup": "Consistent pre-migration backup saved privately; integrity_check passed",
-  "publicAssetVerification": "app.js, admin-view.js and style.css match source; bootstrap healthy",
-  "interfaceValidation": "Desktop and 390px mobile; appointment search, approval, confirmation dialogs and weekday shift copying verified with isolated sample data"
+  "databaseBackup": "Consistent pre-language-migration backup saved privately; integrity_check passed before and after deployment",
+  "publicAssetVerification": "Versioned app.js, admin-view.js, i18n.js, locales/sq.js and style.css match source; HTML references versioned assets; bootstrap healthy",
+  "interfaceValidation": "English and Albanian booking and admin flows verified with isolated data on desktop and 390px mobile; selections and unsaved forms survive switching; public language selector and translated services verified after rollout"
 }
