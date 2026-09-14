@@ -77,3 +77,17 @@ test('only unconfigured local development returns a test code', async t => {
   assert.match(result.devCode, /^\d{6}$/);
   assert.equal(send.mock.callCount(), 0);
 });
+
+test('Albanian verification emails contain a usable code and never expose it in the API result', async t => {
+  const {db,user}=fixture(t);let code;
+  t.mock.method(globalThis,'fetch',async (_url,options)=>{
+    const payload=JSON.parse(options.body);
+    assert.equal(payload.subject,'Kodi juaj i verifikimit ERD');
+    assert.match(payload.textContent,/10 minutash/);
+    code=payload.textContent.match(/\b\d{6}\b/)[0];
+    return new Response('{}',{status:201});
+  });
+  assert.deepEqual(await sendVerification(db,user,{...config,language:'sq'}),{});
+  verifyEmail(db,user.id,code);
+  assert.equal(db.prepare('SELECT verified FROM users WHERE id=?').get(user.id).verified,1);
+});

@@ -3362,3 +3362,12 @@ dialog .modal-description {
 .admin-page .admin-tabs { margin-bottom: 18px; }
 .operations-filters { margin-bottom: 14px; }
 .operations-search { padding: 14px 18px; }
+.language-control { margin: 0; display: inline-flex; }
+.language-control select { width: auto; min-width: 105px; padding: 8px 10px; margin: 0; font-size: 11px; min-height: 36px; background: var(--paper); }
+html[lang="sq"] .button { letter-spacing: 0; }
+@media (max-width: 760px) {
+  #account-nav { gap: 8px; }
+  .language-control select { min-width: 88px; padding: 6px; font-size: 10px; }
+  html[lang="sq"] .header nav a { font-size: 10px; }
+  html[lang="sq"] .agenda-actions { justify-content: flex-start; }
+}

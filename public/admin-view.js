@@ -8,6 +8,6 @@ export function selectAppointments(bookings, { view = 'today', today, now = Date
       : view === 'complete' ? b.status === 'confirmed' && b.ends_at <= now
       : view === 'upcoming' ? active && b.starts_at > now
       : view === 'history' ? !active : true;
-    return matchesView && (!date || b.date === date) && (!search || [b.name, b.email, b.phone, b.service_name].some(value => String(value || '').toLowerCase().includes(search)));
+    return matchesView && (!date || b.date === date) && (!search || [b.name, b.email, b.phone, b.service_name, b.service_name_sq].some(value => String(value || '').toLowerCase().includes(search)));
   }).sort((a, b) => view === 'history' ? b.starts_at - a.starts_at : a.starts_at - b.starts_at);
 }

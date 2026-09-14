@@ -16,6 +16,14 @@ Copy `.env.example` to `.env` to customize configuration. Defaults are EUR, Euro
 
 The supplied **01-modern** brand set is stored unchanged in `public/brand`. The website uses the black horizontal logo in its header/footer, the stacked black logo in account dialogs, and the white mark on the booking photo. Supplied favicons, Apple touch icon, and app icons are wired into the page and `site.webmanifest`. Social previews use the supplied light sharing image, with absolute URLs generated from `APP_URL`; no deployment hostname is hardcoded. The alternate white logos, dark sharing image, and social profile image are retained for later use. These supplied assets contain branding, not salon photography.
 
+## Languages
+
+Use the **EN · English / SQ · Shqip** selector in the header. The choice is remembered in this browser; first-time visitors use Albanian when their browser language is Albanian, otherwise English. Booking, accounts, the studio, admin operations, validation messages, and verification emails support both languages. Switching languages keeps the selected appointment and unsaved form values.
+
+Admins can enter optional Albanian service names and descriptions in **Services & prices**. Empty translations fall back to the original service text. Untouched starter services receive Albanian translations during migration; custom content is preserved. New bookings snapshot both service names so later edits do not change appointment history. Client names, notes, contact details, and custom vacation labels remain as entered.
+
+UI translations are in `public/locales/sq.js`. The `h` template helper translates static copy and keeps interpolated data opaque; canonical service categories, role names, IDs, and API values remain unchanged. Date formatting includes a fallback for embedded browsers without Albanian locale data. Brevo email language follows the language selected when a verification code is requested.
+
 ## Your admin account
 
 The verified account **mendmania@gmail.com** is the protected super admin. Existing verified accounts with that email are promoted automatically on startup; a new account must verify its email before receiving this role. Refresh after deployment, sign in, and open **Salon admin** in the footer or [the admin workspace](https://tregubio.com/#admin).

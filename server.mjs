@@ -81,7 +81,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
         rateLimit(req, 'register', 10);
         const account = await register(db, input);
         cookie(createSession(db, account.id));
-        try { return json({ user: publicUser(account), ...await sendVerification(db, account, mail) }, 201); }
+        try { return json({ user: publicUser(account), ...await sendVerification(db, account, { ...mail, language: req.headers['accept-language']?.startsWith('sq') ? 'sq' : 'en' }) }, 201); }
         catch (e) { if (!(e instanceof AppError)) throw e; return json({ user: publicUser(account), emailError: e.message }, 201); }
       }
       if (route === 'POST /api/auth/login') {
@@ -100,7 +100,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       }
       if (route === 'POST /api/auth/resend') {
         requireUser(); rateLimit(req, 'resend', 10); demand(!user.verified, 'Your email is already verified.');
-        return json(await sendVerification(db, user, mail));
+        return json(await sendVerification(db, user, { ...mail, language: req.headers['accept-language']?.startsWith('sq') ? 'sq' : 'en' }));
       }
       if (route === 'POST /api/auth/verify') {
         requireUser(); rateLimit(req, 'verify', 30); verifyEmail(db, user.id, input.code);

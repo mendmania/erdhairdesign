@@ -11,7 +11,7 @@
     "dev": "node --env-file-if-exists=.env --watch server.mjs",
     "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check server.mjs && node --check lib/store.mjs && node --check lib/auth.mjs && node --check lib/booking.mjs && node --check public/app.js && node --check scripts/admin.mjs && node --check scripts/k3s.mjs && node --check scripts/deploy.mjs && node --check lib/roles.mjs && node --check lib/admin.mjs",
+    "check": "node --check server.mjs && node --check lib/store.mjs && node --check lib/auth.mjs && node --check lib/booking.mjs && node --check public/app.js && node --check scripts/admin.mjs && node --check scripts/k3s.mjs && node --check scripts/deploy.mjs && node --check lib/roles.mjs && node --check lib/admin.mjs && node --check public/i18n.js && node --check public/locales/sq.js",
     "admin": "node --env-file-if-exists=.env scripts/admin.mjs",
     "k3s": "node scripts/deploy.mjs"
   }
