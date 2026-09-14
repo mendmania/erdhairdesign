@@ -5,7 +5,9 @@
   "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34821809022",
   "tests": 41,
   "clusterFoundation": "created",
-  "applicationRollout": "pending Brevo configuration and domain cutover",
+  "applicationRollout": "ready inside cluster; public cutover pending",
   "anonymousPull": true,
-  "hostname": "tregubio.com"
+  "hostname": "tregubio.com",
+  "emailValidation": "Brevo rejected server IP 159.195.30.113 with HTTP 401; authorization required",
+  "storage": "2Gi PVC bound"
 }

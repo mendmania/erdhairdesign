@@ -4,11 +4,11 @@
 
 Live cluster access was verified on September 14, 2026 using the existing Netcup direct kubeconfig. The node `netcupmaniaserver` is Ready, runs K3s v1.35.7+k3s1, and uses **linux/amd64**. The shared Caddy edge has one ready replica and already has egress isolation. SSH is unavailable, but the direct Kubernetes API connection works with certificate verification.
 
-The `erdhairdesign` namespace, non-default retained StorageClass, SQLite PVC, and default-deny policy have been created after API server dry-runs. The PVC waits for its first consuming Pod before provisioning; Pending is expected before the app is deployed. No application Pod or public salon route is running yet. No existing site's edge configuration was changed.
+The `erdhairdesign` namespace, non-default retained StorageClass, SQLite PVC, and default-deny policy have been created after API server dry-runs. The application is now running with one ready Pod and a bound 2Gi SQLite PVC. Both health endpoints returned HTTP 200 from inside the Pod. The dedicated email Secret is installed. No public salon route is running yet. No existing site's edge configuration was changed.
 
 The tested AMD64 image is published; its immutable digest and successful workflow are recorded in [`release.json`](release.json). Anonymous registry access was verified, so this release does not need an image-pull Secret. All 41 tests passed locally and inside the AMD64 CI container. Application and edge-policy manifests also passed server dry-runs; placeholder validation values were never applied. `rruge.com` still returned HTTPS 200 after the isolated foundation was created.
 
-The selected temporary salon hostname is **tregubio.com** (managed in Cloudflare). Still needed for public launch: Brevo API key with a verified sender and the DNS/HTTPS cutover. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
+The selected temporary salon hostname is **tregubio.com** (managed in Cloudflare). Brevo credentials are installed, but Brevo rejected the server IP `159.195.30.113` with HTTP 401 during read-only validation. Authorize that IP under Brevo Settings → Security → Authorized IPs, retaining existing authorized senders/servers, then repeat account/sender validation. No email was sent. DNS/HTTPS cutover is still pending. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
 
 ## Repeatable deployment commands
 
