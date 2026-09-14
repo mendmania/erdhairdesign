@@ -50,7 +50,8 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
         demand(file.startsWith(root) && !path.includes('..'), 'Not found.', 404);
         let content;
         try { content = await readFile(file); } catch { throw new AppError('Not found.', 404); }
-        res.writeHead(200, { 'Content-Type': ({ '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' })[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+        if (file === resolve(root, 'index.html')) content = content.toString('utf8').replaceAll('__APP_ORIGIN__', new URL(appUrl).origin);
+        res.writeHead(200, { 'Content-Type': ({ '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' })[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
         return res.end(req.method === 'HEAD' ? undefined : content);
       }
       rateLimit(req, 'api', 1000);

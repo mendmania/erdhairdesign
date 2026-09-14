@@ -14,6 +14,8 @@ Open [localhost:3000](http://localhost:3000). The SQLite database is created aut
 
 Copy `.env.example` to `.env` to customize configuration. Defaults are EUR, Europe/Belgrade salon time, and a local-only server at `127.0.0.1:3000`. The services, prices, and weekly hours are starter content; edit prices and hours in the admin workspace before using the app with clients. The salon photo is a remote Unsplash placeholder, and fonts load from Google Fonts.
 
+The supplied **01-modern** brand set is stored unchanged in `public/brand`. The website uses the black horizontal logo in its header/footer, the stacked black logo in account dialogs, and the white mark on the booking photo. Supplied favicons, Apple touch icon, and app icons are wired into the page and `site.webmanifest`. Social previews use the supplied light sharing image, with absolute URLs generated from `APP_URL`; no deployment hostname is hardcoded. The alternate white logos, dark sharing image, and social profile image are retained for later use. These supplied assets contain branding, not salon photography.
+
 ## Your admin account
 
 1. Use **Sign in → Create an account** to register.
@@ -51,7 +53,7 @@ Future repeats do not reserve an entire series of slots in advance. If the next 
 
 ## Live email and production
 
-For the existing k3s server that hosts `rruge.com`, use the [salon k3s deployment runbook](infra/k3s/README.md). It includes a pinned Docker image build, persistent SQLite storage, health checks, and an additive route through the shared Caddy edge. Deployment is prepared but has not been applied; the hostname, authorized cluster access, and Brevo credentials are still needed.
+For the existing k3s server that hosts `rruge.com`, use the [salon k3s deployment runbook](infra/k3s/README.md). It includes a pinned Docker image build, persistent SQLite storage, health checks, and an additive route through the shared Caddy edge. The verified cluster now has the salon namespace and retained storage foundation. The deployment helper and GHCR release workflow are implemented; public launch still requires the salon hostname, Brevo configuration, and a published image. No public salon route is running yet.
 
 Email verification uses the [Brevo transactional email API](https://developers.brevo.com/reference/send-transac-email). In Brevo, enable transactional email, verify your sender and authenticate its domain, then create an **API key** under **SMTP & API → API Keys**. This integration uses the HTTP API, so an SMTP key or SMTP password is not needed. Add these values to the git-ignored `.env` file:
 

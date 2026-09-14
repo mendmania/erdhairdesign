@@ -2,21 +2,49 @@
 
 ## Current status
 
-Prepared and container-tested locally; **not deployed**. All 33 application and manifest-rendering tests pass, including inside the Docker test stage. The ARM64 runtime image also passed a network-isolated smoke test with a read-only root filesystem, UID 1000, production settings, working health probes, SQLite persistence across restart, and graceful shutdown with exit code 0. Disposable test resources were removed. No real emails were sent.
+Live cluster access was verified on September 14, 2026 using the existing Netcup direct kubeconfig. The node `netcupmaniaserver` is Ready, runs K3s v1.35.7+k3s1, and uses **linux/amd64**. The shared Caddy edge has one ready replica and already has egress isolation. SSH is unavailable, but the direct Kubernetes API connection works with certificate verification.
 
-Registry publication, the target node architecture, Kubernetes API validation, live rollout, DNS, and TLS checks still need to be completed. The available SSH key was rejected by the documented VPS.
+The `erdhairdesign` namespace, non-default retained StorageClass, SQLite PVC, and default-deny policy have been created after API server dry-runs. The PVC waits for its first consuming Pod before provisioning; Pending is expected before the app is deployed. No application Pod or public salon route is running yet. No existing site's edge configuration was changed.
 
-The Rrugë repository documents this existing platform:
+Still needed for public launch: the salon hostname, Brevo API key and verified sender, an immutable published image, and image-pull access if the registry package is private. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
 
-- VPS: `mendim@159.195.30.113`; node: `netcupmaniaserver`.
-- K3s with the `rancher.io/local-path` provisioner.
-- Owner kubeconfig on that VPS: `/home/mendim/.kube/readyski-beta-direct.yaml`.
-- Shared HTTPS edge: `edge-caddy/edge-caddy`. Pod labels are `app.kubernetes.io/name=edge-caddy` and `app.kubernetes.io/component=edge`.
-- Shared edge management lives in the server's `/home/mendim/ops` checkout.
+## Repeatable deployment commands
 
-These are reference details from the adjacent Rrugë runbooks, not a fresh live inspection. Verify them before applying anything. The active local kubectl context observed during preparation belongs to another cluster: never use it implicitly for this deployment.
+The checked-in helper always requires an explicit kubeconfig and verifies the API server, node identity, AMD64 architecture, edge labels/readiness, storage provisioner, and existing edge egress isolation. It rejects resource-name collisions with other owners, validates manifests with the API server before applying them, and waits for app readiness. It does not modify shared Caddy routes, DNS, Secrets, or existing booking data. Run it from the repository with Node 22.16+ and kubectl installed.
 
-Still needed: the salon's actual hostname, authorized SSH/key or kubeconfig access, the Brevo API key, and a sender verified in Brevo. A separate hostname is required; the app currently serves from `/`, not from a subpath such as `rruge.com/salon`.
+```sh
+export SALON_KUBECONFIG=/secure/path/to/netcup-k3s-admin-direct.yaml
+npm run k3s -- check --kubeconfig "$SALON_KUBECONFIG"
+# Already completed on the verified cluster; safe to repeat for owned resources.
+npm run k3s -- bootstrap --kubeconfig "$SALON_KUBECONFIG"
+```
+
+`.github/workflows/container.yml` tests the application and builds the runtime image for pull requests and main pushes. Run **Test and publish salon image** manually on `main` to publish the tested AMD64 image to this repository's GHCR package. The job uses its short-lived GitHub token, pinned action revisions, and records an immutable image digest in the run summary. It does not grant GitHub cluster access or change package visibility. Until the workflow is pushed and run, no image is published by this implementation.
+
+After selecting the hostname and the published digest, generate a new release directory (existing directories are never overwritten):
+
+```sh
+export SALON_HOSTNAME=your-actual-salon-domain.com
+export SALON_IMAGE=ghcr.io/mendmania/erdhairdesign@sha256:ACTUAL_DIGEST
+npm run k3s -- plan --kubeconfig "$SALON_KUBECONFIG" \
+  --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
+  --pull-secret erdhairdesign-registry --output .runtime/k3s/release-001
+```
+
+Create the dedicated email and optional registry Secrets using section 3 below. The email Secret must contain **only** `BREVO_API_KEY` and `EMAIL_FROM`, preventing overrides of production settings. Then validate and roll out the private app:
+
+```sh
+npm run k3s -- deploy --kubeconfig "$SALON_KUBECONFIG" \
+  --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
+  --pull-secret erdhairdesign-registry --dry-run
+npm run k3s -- deploy --kubeconfig "$SALON_KUBECONFIG" \
+  --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
+  --pull-secret erdhairdesign-registry
+```
+
+Omit `--pull-secret` only for an image accessible without authentication. A successful rollout means the app is ready **inside the cluster**. Complete the shared edge/DNS steps below and verify HTTPS/email before announcing it publicly. Before an upgrade, take a consistent database backup; the helper never performs an automatic data rollback.
+
+The existing platform uses `mendim@159.195.30.113`, the remote owner kubeconfig `/home/mendim/.kube/readyski-beta-direct.yaml`, and the shared edge `edge-caddy/edge-caddy`. Its live configuration is an immutable ConfigMap mounted with subPath and `admin off`, so the cutover must preserve the latest configuration and account for a brief shared-edge restart. Platform source management remains in `/home/mendim/ops`.
 
 ## Deployment layout
 
@@ -34,7 +62,7 @@ The offline renderer `scripts/k3s.mjs` generates ordinary Kubernetes JSON, accep
 
 SQLite requires a single replica and a persistent disk on this initial deployment. Do not add an HPA or multiple replicas. A node loss can lose availability and local storage; arrange consistent encrypted off-node backups before taking real bookings.
 
-## 1. Build a tested image
+## 1. Build a tested image (manual alternative)
 
 From a machine with a running Docker engine:
 
@@ -47,12 +75,12 @@ docker build --target runtime -t erdhairdesign:local .
 
 The official Node 22 base is pinned to a multiarchitecture digest. `.dockerignore` uses an allowlist that excludes `.env`, local data, runtime files, and Git history. The final runtime stage excludes tests.
 
-Publish an image for the actual node architecture using the project's own registry authorization; `ghcr.io/mendmania/erdhairdesign` corresponds to this repository. Use a unique release tag and record its immutable digest. Building on this Mac defaults to ARM64; verify the VPS architecture or publish both architectures with buildx. Do not reuse Rrugë's deployment image or change its package visibility. No image was published during preparation.
+Publish an image for the actual node architecture using the project's own registry authorization; `ghcr.io/mendmania/erdhairdesign` corresponds to this repository. Use a unique release tag and record its immutable digest. Building on this Mac defaults to ARM64; verify the VPS architecture or publish both architectures with buildx. Do not reuse Rrugë's deployment image or change its package visibility. The workflow run summary is the release source of truth after publication.
 
-Example after choosing an actual release tag and obtaining registry access:
+For manual publication after obtaining registry access:
 
 ```sh
-docker buildx build --platform linux/amd64,linux/arm64 --target runtime \
+docker buildx build --platform linux/amd64 --target runtime \
   --tag "ghcr.io/mendmania/erdhairdesign:$SALON_RELEASE" --push .
 ```
 

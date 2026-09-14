@@ -9,5 +9,6 @@
 !scripts/
 !scripts/admin.mjs
 !scripts/k3s.mjs
+!scripts/deploy.mjs
 !tests/
 !tests/**

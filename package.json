@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "description": "A simple salon website with verified accounts and appointment management.",
-  "engines": { "node": ">=22.16.0" },
+  "engines": {
+    "node": ">=22.16.0"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch server.mjs",
     "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check server.mjs && node --check lib/store.mjs && node --check lib/auth.mjs && node --check lib/booking.mjs && node --check public/app.js && node --check scripts/admin.mjs && node --check scripts/k3s.mjs",
-    "admin": "node --env-file-if-exists=.env scripts/admin.mjs"
+    "check": "node --check server.mjs && node --check lib/store.mjs && node --check lib/auth.mjs && node --check lib/booking.mjs && node --check public/app.js && node --check scripts/admin.mjs && node --check scripts/k3s.mjs && node --check scripts/deploy.mjs",
+    "admin": "node --env-file-if-exists=.env scripts/admin.mjs",
+    "k3s": "node scripts/deploy.mjs"
   }
 }

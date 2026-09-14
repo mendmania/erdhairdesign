@@ -18,7 +18,7 @@ async function fixture(t, options = {}) {
     return { status: res.status, headers: res.headers, body: await res.json() };
   }
   async function signUp() { return request('/api/auth/register', 'POST', { name: 'Test Client', phone: '+38112345678', email: 'test@example.test', password: 'a-test-password-only' }); }
-  return { db, app, request, signUp };
+  return { db, app, request, signUp, url };
 }
 
 test('registration, verification, booking, cancellation, login and logout work over HTTP', async t => {
@@ -97,6 +97,24 @@ test('health probes distinguish a live server from an unavailable database witho
   db.prepare('DELETE FROM settings').run();
   assert.equal((await request('/health/live')).status, 200);
   assert.deepEqual(await request('/health/ready').then(r => ({ status: r.status, body: r.body })), { status: 503, body: { error: 'Not ready.' } });
+});
+
+test('brand assets have browser-safe MIME types and share previews use the configured origin', async t => {
+  const { url } = await fixture(t, { appUrl: 'https://salon.example.test' });
+  const html = await (await fetch(url)).text();
+  assert.match(html, /content="https:\/\/salon\.example\.test\/brand\/social\/share-light-1200x630\.jpg"/);
+  assert.ok(!html.includes('__APP_ORIGIN__'));
+  for (const [path, type] of [
+    ['/brand/logos/logo-horizontal-black.png', 'image/png'],
+    ['/brand/icons/favicon.ico', 'image/x-icon'],
+    ['/brand/social/share-light-1200x630.jpg', 'image/jpeg'],
+    ['/site.webmanifest', 'application/manifest+json'],
+  ]) {
+    const response = await fetch(url + path);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), type);
+    assert.ok((await response.arrayBuffer()).byteLength > 0);
+  }
 });
 
 for (const trustProxy of [false, true]) {

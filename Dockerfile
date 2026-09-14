@@ -8,7 +8,7 @@ RUN mkdir -p /data && chown node:node /data
 USER 1000:1000
 
 FROM base AS test
-COPY --chown=node:node scripts/k3s.mjs ./scripts/k3s.mjs
+COPY --chown=node:node scripts/k3s.mjs scripts/deploy.mjs ./scripts/
 COPY --chown=node:node tests/ ./tests/
 RUN node --test tests/*.test.mjs
 
