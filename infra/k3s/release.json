@@ -1,9 +1,9 @@
 {
-  "sourceCommit": "f79030a8182de1070588a0365226c9bf6a79daea",
-  "image": "ghcr.io/mendmania/erdhairdesign@sha256:3c0cafc87e0d61b2d259e93f6364f443e52c2cd78a28295984f49660253a1504",
+  "sourceCommit": "b476cddb26b3fcb3c9f05fde4d8a2263dd23b066",
+  "image": "ghcr.io/mendmania/erdhairdesign@sha256:1b076a8448248175b71c6356c55c6c59b62793d332c510522927025dec1c24ab",
   "platform": "linux/amd64",
-  "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34821809022",
-  "tests": 41,
+  "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34826089224",
+  "tests": 51,
   "clusterFoundation": "created",
   "applicationRollout": "live at https://tregubio.com",
   "anonymousPull": true,
@@ -14,5 +14,8 @@
   "edgeConfigMap": "erdhairdesign-edge-497262a88fcc",
   "previousEdgeConfigMap": "erdhairdesign-edge-5d58ba402184",
   "cloudflareProxy": true,
-  "deploymentTests": 43
+  "deploymentTests": 51,
+  "ownerRole": "mendmania@gmail.com verified as protected super_admin",
+  "databaseBackup": "Consistent pre-migration backup saved privately; integrity_check passed",
+  "publicAssetVerification": "app.js and style.css match source; bootstrap healthy"
 }
