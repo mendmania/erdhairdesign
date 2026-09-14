@@ -98,6 +98,12 @@ The tests cover HTTP registration/sign-in/sign-out, email verification limits, B
 
 The customer registration-to-booking flow and admin approval/settings screens were also checked in the browser, with a 390px mobile layout and no horizontal overflow.
 
+## Visual design and mobile booking
+
+The interface takes its charcoal, muted gold and editorial typography direction from Epic Agency. It uses Inter for controls and Bodoni Moda for display headings. Service cards open availability directly; filters appear only for menus larger than six services. Only available times are shown, with explicit week navigation and optional recurring visits in a disclosure.
+
+Main actions and time slots have 52px or larger targets. Form text remains at least 16px to avoid input-triggered mobile zoom; pinch zoom remains available. Mobile booking actions stay in view, and page transitions respect reduced-motion preferences. Update the asset version in index.html and module imports when publishing interface changes so Cloudflare/browser caches pick them up.
+
 ## Files
 
 ```text

@@ -1,5 +1,5 @@
-import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260914-i18n';
-import { selectAppointments } from './admin-view.js?v=20260914-i18n';
+import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260914-modern';
+import { selectAppointments } from './admin-view.js?v=20260914-modern';
 try { setLanguage(localStorage.getItem('erd-language') || (navigator.language.startsWith('sq') ? 'sq' : 'en')); } catch {}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -32,7 +32,9 @@ const service = () => state.services.find(s => s.id === state.serviceId);
 const dateLabel = formatDate;
 const dayAfter = (date, days) => { const d = new Date(h`${date}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const duration = m => m >= 60 ? h`${Math.floor(m / 60)} hr${m % 60 ? h` ${m % 60} min` : ''}` : h`${m} min`;
-let toastTimer, availabilityRequest = 0, modalReturnFocus;
+let toastTimer, availabilityRequest = 0, modalReturnFocus, renderedRoute, renderedStep;
+const motion = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+function focusBookingStep() { const title = $('#step-content h2'); title?.setAttribute('tabindex', '-1'); title?.focus({preventScroll:true}); $('#booking-panel')?.scrollIntoView({behavior:motion(),block:'start'}); }
 
 async function api(path, method = 'GET', data) {
   const response = await fetch(h`/api${path}`, { method, headers: { 'Accept-Language': getLanguage(), ...(data === undefined ? {} : { 'Content-Type': 'application/json' }) }, body: data === undefined ? undefined : JSON.stringify(data) });
@@ -50,7 +52,7 @@ function updateNav() {
   $('#account-nav').innerHTML = state.user ? h`${isStaff() ? h('<a class="account-link workspace-link" href="#admin">Workspace</a>') : ''}<a class="account-link" href="#appointments">${icon('calendar')}<span>My visits</span></a><button class="avatar" data-action="account" aria-label="Your account">${esc(state.user.name.slice(0, 1))}</button>` : h`<button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button>`;
   $('#account-nav').insertAdjacentHTML('afterbegin', languageControl());
 }
-function languageControl() { return `<label class="language-control"><span class="sr-only">${t('Language')}</span><select id="language-select" aria-label="${t('Language')}"><option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>EN · English</option><option value="sq" ${getLanguage() === 'sq' ? 'selected' : ''}>SQ · Shqip</option></select></label>`; }
+function languageControl() { return `<label class="language-control"><span class="sr-only">${t('Language')}</span><select id="language-select" aria-label="${t('Language')}"><option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option><option value="sq" ${getLanguage() === 'sq' ? 'selected' : ''}>Shqip</option></select></label>`; }
 function render() {
   const focused = document.activeElement;
   const focusSelector = focused?.dataset.action ? Object.entries(focused.dataset)
@@ -63,6 +65,10 @@ function render() {
   if (state.route === 'studio') main.innerHTML = studioPage();
   if (state.route === 'appointments') main.innerHTML = appointmentsPage();
   if (state.route === 'admin') main.innerHTML = adminPage();
+  // Animate navigation, not every time or date selection.
+  if (renderedRoute === state.route) main.querySelector('.page-enter')?.classList.remove('page-enter');
+  if (renderedRoute === state.route && renderedStep === state.step) main.querySelector('.step-enter')?.classList.remove('step-enter');
+  renderedRoute = state.route; renderedStep = state.step;
   if (!$('#modal').open && focusSelector) {
     const replacement = $(focusSelector);
     if (replacement && !replacement.disabled) replacement.focus({ preventScroll: true });
@@ -70,25 +76,25 @@ function render() {
 }
 function heading(eyebrow, title, text) { return h`<div class="page-heading"><p class="eyebrow"><span class="small-line"></span>${eyebrow}</p><h1>${title}</h1><p class="heading-description">${text}</p></div>`; }
 function bookingPage() {
-  return h`<section class="booking-page page-enter">${heading(t('A LITTLE TIME, JUST FOR YOU'), h('Your next good <em>hair day.</em>'), h('A fresh cut. A new color. A moment to yourself. Let’s make it happen.'))}
-    <div class="booking-layout"><section class="booking-panel" aria-label="Book an appointment">
-      <ol class="stepper">${[h('Your service'), h('Date & time'), h('Your details'), h('Confirm')].map((label, i) => h`<li class="${i === state.step ? 'current' : i < state.step ? 'done' : ''}"><button data-action="step" data-step="${i}" ${i >= state.step ? 'disabled' : ''} ${i === state.step ? 'aria-current="step"' : ''}><span class="step-number">${i < state.step ? icon('check') : i + 1}</span><span>${label}</span></button></li>`).join('')}</ol>
+  return h`<section class="booking-page page-enter">${heading(t('HAIR. CARE. YOU.'), h('Good hair.<br><em>Zero fuss.</em>'), h('Choose a service. Pick your time. We’ll take care of the rest.'))}
+    <div class="booking-layout"><section class="booking-panel" id="booking-panel" aria-label="Book an appointment">
+      <ol class="stepper">${[h('Service'), h('Time'), h('Details'), h('Book')].map((label, i) => h`<li class="${i === state.step ? 'current' : i < state.step ? 'done' : ''}"><button data-action="step" data-step="${i}" ${i >= state.step ? 'disabled' : ''} ${i === state.step ? 'aria-current="step"' : ''}><span class="step-number">${i < state.step ? icon('check') : i + 1}</span><span>${label}</span></button></li>`).join('')}</ol>
       <div class="step-body step-enter" id="step-content">${[serviceStep, timeStep, detailsStep, confirmStep][state.step]()}</div>
-      ${state.step < 2 ? h`<div class="booking-bottom"><span class="subtle">${state.step === 0 ? h`${icon('clock')} A little self-care, in a few simple steps` : h`${icon('shield')} Your time is held when you book`}</span><button class="button button-primary" data-action="next" ${state.step === 0 ? (!service() ? 'disabled' : '') : (!state.slot ? 'disabled' : '')}>${state.step === 0 ? h('Choose date & time') : h('Your details')} ${icon('arrow')}</button></div>` : ''}
+      ${state.step === 1 ? h`<div class="booking-bottom"><button class="button button-outline" data-action="step" data-step="0">← Back</button><div class="selection-total" aria-live="polite"><strong>${state.slot ? state.slot.time + ' · ' + money(state.slot.price) : h('Choose a time')}</strong><span>Pay at the salon</span></div><button class="button button-primary" data-action="next" ${!state.slot || state.slotsLoading ? 'disabled' : ''}>Continue ${icon('arrow')}</button></div>` : ''}
     </section>${summaryCard()}</div>
-    <div class="booking-promises"><span>${icon('leaf')} Thoughtful care, always</span><span>${icon('shield')} A secure, personal experience</span><span>${icon('repeat')} Your routine, made easy</span></div>
+    <div class="booking-promises"><span>${icon('shield')} Verified accounts. Personal care.</span><span>${icon('clock')} Pay at the salon</span></div>
   </section>`;
 }
 function serviceStep() {
-  const filtered = state.services.filter(s => state.category === 'All services' || s.category === state.category);
-  return h`<div class="section-title"><div><p class="eyebrow">01 / THE GOOD PART</p><h2>What brings you in?</h2><p>Choose a little something for your hair.</p></div><span class="small-label">Made for you ${icon('sparkles')}</span></div>
-    <div class="category-tabs" role="group" aria-label="Filter services">${['All services', 'Cut & style', 'Color', 'Treatments'].map(c => h`<button class="${state.category === c ? 'selected' : ''}" data-action="category" data-value="${esc(c)}" aria-pressed="${state.category === c}">${t(c)}</button>`).join('')}</div>
+  const filtered = state.services.filter(s => state.services.length <= 6 || state.category === 'All services' || s.category === state.category);
+  return h`<div class="section-title"><div><p class="eyebrow">01 / YOUR SERVICE</p><h2>Choose your service.</h2><p>Tap a service to see available times.</p></div></div>
+    ${state.services.length > 6 ? h`<div class="category-tabs" role="group" aria-label="Filter services">${['All services', 'Cut & style', 'Color', 'Treatments'].map(c => h`<button class="${state.category === c ? 'selected' : ''}" data-action="category" data-value="${esc(c)}" aria-pressed="${state.category === c}">${t(c)}</button>`).join('')}</div>` : ''}
     <div class="service-grid">${filtered.map(s => serviceCard(s)).join('') || h('<p class="empty-slots">No services available here yet. Please check back soon.</p>')}</div>
-    <p class="pricing-note">${icon('sun')} Need a time outside our usual hours? We have options for that, too.</p>`;
+    <p class="pricing-note">${icon('shield')} Sign in and verify your email before confirming your booking.</p>`;
 }
 function serviceCard(s, catalog = false) {
-  return h`<button class="service-card ${state.serviceId === s.id && !catalog ? 'selected' : ''}" data-action="${catalog ? 'pick-service' : 'service'}" data-id="${s.id}" ${catalog ? '' : h`aria-pressed="${state.serviceId === s.id}"`}>
-    <span class="service-card-top"><span class="service-icon">${icon(s.icon)}</span>${catalog ? icon('arrow') : h`<span class="radio-circle">${state.serviceId === s.id ? icon('check') : ''}</span>`}</span>
+  return h`<button class="service-card ${state.serviceId === s.id && !catalog ? 'selected' : ''}" data-action="${catalog ? 'pick-service' : 'service'}" data-id="${s.id}">
+    <span class="service-card-top"><span class="service-icon">${icon(s.icon)}</span>${icon('arrow')}</span>
     <h3>${esc(serviceName(s))}</h3><p>${esc(serviceDescription(s))}</p><span class="service-meta"><span>${icon('clock')}${duration(s.duration)}</span><strong>${money(s.price)}</strong></span>
   </button>`;
 }
@@ -101,21 +107,22 @@ function summaryCard() {
 }
 function timeStep() {
   const regular = state.slots.filter(s => !s.outside), outside = state.slots.filter(s => s.outside);
-  return h`<div class="section-title"><div><p class="eyebrow">02 / MAKE SOME SPACE</p><h2>When works for you?</h2><p>Find a moment that fits into your day.</p></div></div>
+  return h`<div class="section-title"><div><p class="eyebrow">02 / YOUR TIME</p><h2>Pick your time.</h2><p>${esc(serviceName(service()))} · ${duration(service().duration)}</p></div></div>
     <div class="date-heading"><strong>${dateLabel(state.date, { weekday: undefined, day: undefined, month: 'long', year: 'numeric' })}</strong><label class="date-picker-label">${icon('calendar')} Pick a date <input type="date" aria-label="Choose appointment date" id="date-picker" min="${state.today}" max="${dayAfter(state.today, 90)}" value="${state.date}"/></label></div>
-    <div class="date-strip">${Array.from({ length: 7 }, (_, i) => { const d = dayAfter(state.date < dayAfter(state.today, 6) ? state.today : state.date, i); return h`<button data-action="date" data-date="${d}" class="date-pill ${d === state.date ? 'selected' : ''}" aria-pressed="${d === state.date}" ${d > dayAfter(state.today, 90) ? 'disabled' : ''}><span>${dateLabel(d, { day: undefined, month: undefined, weekday: 'short' })}</span><strong>${Number(d.slice(-2))}</strong></button>`; }).join('')}</div>
-    <p class="slot-heading">${icon('sun')} During salon hours <span>${money(service().price)}</span></p><div class="time-grid">${regular.length ? regular.map(slotButton).join('') : h`<p class="empty-slots">${state.closed ? h('The salon is taking time off on this date. Please choose another day.') : h('No regular-hour times on this day. Try another date.')}</p>`}</div>
-    ${outside.length ? h`<details class="outside-times" ${state.slot?.outside ? 'open' : ''}><summary><span>${icon('clock')} A little outside the usual hours</span><span>${money(service().outside_price)} <span class="chevron">⌄</span></span></summary><p>${state.settings.outsideApproval ? h('These visits need a quick approval from our team.') : h('Outside-hours visits use the booking approval rules.')} The price includes your outside-hours appointment.</p><div class="time-grid">${outside.map(slotButton).join('')}</div></details>` : ''}
-    <div class="repeat-option"><span class="repeat-icon">${icon('repeat')}</span><div><strong>Make it your regular thing</strong><p>One visit at a time. Your next is booked after you come in.</p></div><select id="repeat-weeks" aria-label="Repeat appointment">${[0, 1, 2, 4, 6, 8].map(w => h`<option value="${w}" ${w === state.repeatWeeks ? 'selected' : ''}>${w ? h`Every ${w} week${w > 1 ? 's' : ''}` : h('Just this once')}</option>`).join('')}</select></div><p class="timezone-note">All appointment times are in ${esc(state.settings.timezone)}.</p>`;
+    <div class="week-navigation"><button class="button button-outline button-small" data-action="week" data-direction="-1" ${state.date <= state.today ? 'disabled' : ''} aria-label="Previous week">←</button><span>Choose a day</span><button class="button button-outline button-small" data-action="week" data-direction="1" ${state.date >= dayAfter(state.today, 90) ? 'disabled' : ''} aria-label="Next week">→</button></div><div class="date-strip">${Array.from({ length: 7 }, (_, i) => { const d = dayAfter(state.date < dayAfter(state.today, 6) ? state.today : state.date, i); return h`<button data-action="date" data-date="${d}" class="date-pill ${d === state.date ? 'selected' : ''}" aria-pressed="${d === state.date}" ${d > dayAfter(state.today, 90) ? 'disabled' : ''}><span>${dateLabel(d, { day: undefined, month: undefined, weekday: 'short' })}</span><strong>${Number(d.slice(-2))}</strong></button>`; }).join('')}</div>
+    ${state.slotsLoading ? h('<p class="availability-status" role="status">Loading available times…</p>') : state.slotsError ? h('<div class="availability-status" role="alert"><p>Could not load times.</p><button class="button button-outline" data-action="retry-slots">Try again</button></div>') : h`<p class="slot-heading">${icon('sun')} During salon hours <span>${money(service().price)}</span></p><div class="time-grid">${regular.some(s => s.available) ? regular.filter(s => s.available).map(slotButton).join('') : h`<p class="empty-slots">${state.closed ? h('The salon is taking time off on this date. Please choose another day.') : h('No regular-hour times on this day. Try another date.')}</p>`}</div>
+    ${outside.some(s => s.available) ? h`<details class="outside-times" ${state.slot?.outside ? 'open' : ''}><summary><span>${icon('clock')} A little outside the usual hours</span><span>${money(service().outside_price)} <span class="chevron">⌄</span></span></summary><p>${state.settings.outsideApproval ? h('These visits need a quick approval from our team.') : h('Outside-hours visits use the booking approval rules.')} The price includes your outside-hours appointment.</p><div class="time-grid">${outside.filter(s => s.available).map(slotButton).join('')}</div></details>` : ''}
+    `}
+    <details class="booking-options" ${state.repeatWeeks ? 'open' : ''}><summary>Repeat this visit <span class="optional">Optional</span>${icon('repeat')}</summary><div class="repeat-option"><span class="repeat-icon">${icon('repeat')}</span><div><strong>Make it your regular thing</strong><p>One visit at a time. Your next is booked after you come in.</p></div><select id="repeat-weeks" aria-label="Repeat appointment">${[0, 1, 2, 4, 6, 8].map(w => h`<option value="${w}" ${w === state.repeatWeeks ? 'selected' : ''}>${w ? h`Every ${w} week${w > 1 ? 's' : ''}` : h('Just this once')}</option>`).join('')}</select></div></details><p class="timezone-note">All appointment times are in ${esc(state.settings.timezone)}.</p>`;
 }
 function slotButton(s) { return h`<button class="time-slot ${state.slot?.time === s.time ? 'selected' : ''}" data-action="time" data-time="${s.time}" ${!s.available ? 'disabled' : ''} aria-pressed="${state.slot?.time === s.time}">${s.time}${!s.available ? h('<span class="sr-only"> unavailable</span>') : ''}</button>`; }
 function detailsStep() {
-  return h`<div class="section-title"><div><p class="eyebrow">03 / NICE TO MEET YOU</p><h2>Let’s make it personal.</h2><p>A few details, so we’re ready to welcome you.</p></div></div>
-    ${!state.user ? h`<div class="account-gate"><span class="gate-icon">${icon('user')}</span><h3>Your good hair days start here.</h3><p>Create an account and verify your email to book.<br>Already part of the studio? Welcome back.</p><button class="button button-primary" data-action="register">Create an account ${icon('arrow')}</button><p class="signin-caption">Already have an account? <button class="text-button" data-action="login">Sign in</button></p><span class="gate-assurance">${icon('shield')} Your details stay private and secure.</span></div>` : !state.user.verified ? h`<div class="account-gate"><span class="gate-icon">${icon('mail')}</span><h3>One small step: verify your email.</h3><p>Confirm ${esc(state.user.email)} to book your visit.</p><button class="button button-primary" data-action="verify-open">Verify email ${icon('arrow')}</button></div>` : h`<form id="details-form" class="details-form"><div class="verified-banner">${icon('shield')} Email verified <span>${esc(state.user.email)}</span></div><div class="field-grid"><label>Full name<input name="name" autocomplete="name" value="${esc(state.user.name)}" required minlength="2" maxlength="100" placeholder="Your full name"/></label><label>Phone number<input name="phone" type="tel" autocomplete="tel" value="${esc(state.user.phone)}" required placeholder="+381 …"/></label></div><label>Anything we should know? <span class="optional">Optional</span><textarea name="notes" maxlength="1000" rows="4" placeholder="Your hair goals, preferences, or anything that helps us make your visit feel like you.">${esc(state.notes)}</textarea></label><p class="form-error" id="form-error" role="alert"></p><div class="form-footer"><button type="button" class="text-button" data-action="step" data-step="1">← Back</button><button class="button button-primary" type="submit">Review your visit ${icon('arrow')}</button></div></form>`}`;
+  return h`<div class="section-title"><div><p class="eyebrow">03 / YOUR DETAILS</p><h2>Your details.</h2><p>A few details, so we’re ready to welcome you.</p></div></div>
+    ${!state.user ? h`<div class="account-gate"><span class="gate-icon">${icon('user')}</span><h3>Your good hair days start here.</h3><p>Create an account and verify your email to book.<br>Already part of the studio? Welcome back.</p><button class="button button-primary" data-action="register">Create an account ${icon('arrow')}</button><p class="signin-caption">Already have an account? <button class="text-button" data-action="login">Sign in</button></p><span class="gate-assurance">${icon('shield')} Your details stay private and secure.</span></div>` : !state.user.verified ? h`<div class="account-gate"><span class="gate-icon">${icon('mail')}</span><h3>One small step: verify your email.</h3><p>Confirm ${esc(state.user.email)} to book your visit.</p><button class="button button-primary" data-action="verify-open">Verify email ${icon('arrow')}</button></div>` : h`<form id="details-form" class="details-form"><div class="verified-banner">${icon('shield')} Email verified <span>${esc(state.user.email)}</span></div><div class="field-grid"><label>Full name<input name="name" autocomplete="name" value="${esc(state.user.name)}" required minlength="2" maxlength="100" placeholder="Your full name"/></label><label>Phone number<input name="phone" type="tel" autocomplete="tel" value="${esc(state.user.phone)}" required placeholder="+381 …"/></label></div><label>Anything we should know? <span class="optional">Optional</span><textarea name="notes" maxlength="1000" rows="2" placeholder="Your hair goals, preferences, or anything that helps us make your visit feel like you.">${esc(state.notes)}</textarea></label><p class="form-error" id="form-error" role="alert"></p><div class="form-footer"><button type="button" class="text-button" data-action="step" data-step="1">← Back</button><button class="button button-primary" type="submit">Review your visit ${icon('arrow')}</button></div></form>`}`;
 }
 function confirmStep() {
   const pending = !state.settings.autoApprove || state.user.approvals < state.settings.requiredApprovals || (state.slot.outside && state.settings.outsideApproval);
-  return h`<div class="section-title"><div><p class="eyebrow">04 / SEE YOU SOON</p><h2>A little time, all yours.</h2><p>One last look, and you’re on your way.</p></div></div>
+  return h`<div class="section-title"><div><p class="eyebrow">04 / REVIEW & BOOK</p><h2>Ready when you are.</h2><p>Check your details, then send your booking.</p></div></div>
     <div class="review-service"><span class="service-icon">${icon(service().icon)}</span><div><h3>${esc(serviceName(service()))}</h3><p>${duration(service().duration)} · ${state.slot.outside ? h('Outside salon hours') : h('During salon hours')}</p></div><strong>${money(state.slot.price)}</strong></div>
     <dl class="review-list"><div><dt>Your moment</dt><dd>${dateLabel(state.date)} at ${state.slot.time}</dd></div><div><dt>Booked for</dt><dd>${esc(state.user.name)}</dd></div><div><dt>Email</dt><dd>${esc(state.user.email)}</dd></div><div><dt>Phone</dt><dd>${esc(state.user.phone)}</dd></div><div><dt>Your routine</dt><dd>${state.repeatWeeks ? h`Every ${state.repeatWeeks} week${state.repeatWeeks > 1 ? 's' : ''}` : h('Just this once')}</dd></div>${state.notes ? h`<div><dt>A little note</dt><dd>${esc(state.notes)}</dd></div>` : ''}</dl>
     <div class="info-box">${icon(pending ? 'clock' : 'check')}<div><strong>${pending ? h('A quick check from our team.') : h('You’re ready for instant confirmation.')}</strong><p>${pending ? h('We’ll review your request. Check My visits for your confirmation before coming in.') : h('Your appointment will be confirmed as soon as you book.')} Payment is at the salon.</p></div></div>
@@ -198,11 +205,18 @@ function verifyModal() {
 }
 async function loadSlots() {
   const request = ++availabilityRequest;
-  const result = await api(h`/availability?service=${encodeURIComponent(state.serviceId)}&date=${state.date}`);
-  if (request !== availabilityRequest) return;
-  state.slots = result.slots;
-  state.closed = Boolean(result.closed);
-  if (state.slot) state.slot = state.slots.find(s => s.time === state.slot.time && s.available) || null;
+  state.slotsLoading = true; state.slotsError = false; state.slots = [];
+  render();
+  try {
+    const result = await api(`/availability?service=${encodeURIComponent(state.serviceId)}&date=${state.date}`);
+    if (request !== availabilityRequest) return;
+    state.slots = result.slots;
+    state.closed = Boolean(result.closed);
+    if (state.slot) state.slot = state.slots.find(s => s.time === state.slot.time && s.available) || null;
+  } catch (error) {
+    if (request === availabilityRequest) { state.slot = null; state.slotsError = true; }
+    throw error;
+  } finally { if (request === availabilityRequest) { state.slotsLoading = false; render(); } }
 }
 async function route() {
   state.route = ['book', 'services', 'studio', 'appointments', 'admin'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'book';
@@ -220,11 +234,19 @@ async function afterAuth() {
 async function action(button) {
   const a = button.dataset.action;
   if (a === 'category') { state.category = button.dataset.value; render(); }
-  if (a === 'service' || a === 'pick-service') { state.serviceId = button.dataset.id; state.slot = null; state.step = 0; if (a === 'pick-service') { location.hash = 'book'; } render(); }
-  if (a === 'next') { if (state.step === 0) await loadSlots(); state.step++; render(); $('#step-content').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
-  if (a === 'step') { state.step = Number(button.dataset.step); if (state.step === 1) await loadSlots(); render(); }
-  if (a === 'date') { state.date = button.dataset.date; state.slot = null; await loadSlots(); render(); }
-  if (a === 'time') { state.slot = state.slots.find(s => s.time === button.dataset.time); render(); }
+  if (a === 'service' || a === 'pick-service') {
+    state.serviceId = button.dataset.id; state.slot = null; state.step = 1; state.route = 'book';
+    if (location.hash !== '#book') location.hash = 'book';
+    render(); await loadSlots(); if (state.step === 1) focusBookingStep();
+  }
+  if (a === 'next') { if (!state.slot || state.slotsLoading) return; state.step = 2; render(); focusBookingStep(); }
+  if (a === 'step') { state.step = Number(button.dataset.step); render(); focusBookingStep(); if (state.step === 1) await loadSlots(); }
+  if (a === 'date' || a === 'week') {
+    state.date = a === 'date' ? button.dataset.date : [state.today, dayAfter(state.date, Number(button.dataset.direction) * 7), dayAfter(state.today, 90)].sort()[1];
+    state.slot = null; await loadSlots();
+  }
+  if (a === 'retry-slots') await loadSlots();
+  if (a === 'time') { if (state.slotsLoading) return; state.slot = state.slots.find(s => s.time === button.dataset.time && s.available); render(); }
   if (a === 'login' || a === 'register') authModal(a);
   if (a === 'modal-close') closeModal();
   if (a === 'verify-open') verifyModal();
@@ -279,7 +301,7 @@ document.addEventListener('change', async event => {
       $('#language-select').focus({preventScroll:true});
     }
     if (event.target.id === 'date-picker') { const date = event.target.value; if (date < state.today || date > dayAfter(state.today, 90)) throw new Error(h('Choose a date within the next 90 days.')); state.date = date; state.slot = null; await loadSlots(); render(); }
-    if (event.target.id === 'repeat-weeks') { state.repeatWeeks = Number(event.target.value); render(); }
+    if (event.target.id === 'repeat-weeks') { state.repeatWeeks = Number(event.target.value); render(); $('#repeat-weeks').focus({preventScroll:true}); }
     if (event.target.id === 'admin-date') { state.adminDate = event.target.value; $('#admin-results').innerHTML = adminResults(); }
   } catch (error) { toast(error.message); }
 });
@@ -295,7 +317,7 @@ document.addEventListener('submit', async event => {
   try {
     if (form.id === 'auth-form') { const result = await api(h`/auth/${state.authMode}`, 'POST', data); state.user = result.user; state.devCode = result.devCode; if (result.emailError) toast(result.emailError); await afterAuth(); }
     if (form.id === 'verify-form') { const result = await api('/auth/verify', 'POST', data); state.user = result.user; state.devCode = null; await afterAuth(); toast(h('Email verified. You’re ready to book.')); }
-    if (form.id === 'details-form') { state.user = (await api('/profile', 'PATCH', data)).user; state.notes = data.notes; state.step = 3; render(); }
+    if (form.id === 'details-form') { state.user = (await api('/profile', 'PATCH', data)).user; state.notes = data.notes; state.step = 3; render(); focusBookingStep(); }
     if (form.id === 'hours-form' || form.id === 'rules-form') {
       const s = structuredClone(state.admin.settings);
       if (form.id === 'hours-form') { s.allowOutside = data.allowOutside === 'on'; s.outsideStart = data.outsideStart; s.outsideEnd = data.outsideEnd; s.shifts = s.shifts.map(d => ({ day: d.day, open: data[h`open-${d.day}`] === 'on', start: data[h`start-${d.day}`], end: data[h`end-${d.day}`] })); }
@@ -310,7 +332,7 @@ document.addEventListener('submit', async event => {
   finally { if (submit) { submit.disabled = false; submit.removeAttribute('aria-busy'); } }
 });
 $('#modal').addEventListener('click', event => { if (event.target === $('#modal')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) closeModal(); } });
-window.addEventListener('hashchange', () => { route().catch(e => toast(e.message)); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+window.addEventListener('hashchange', () => { route().then(() => { if (state.route === 'book' && state.step > 0) focusBookingStep(); else window.scrollTo({top:0,behavior:motion()}); }).catch(e => toast(e.message)); });
 $('#year').textContent = new Date().getFullYear();
 try { Object.assign(state, await api('/bootstrap')); state.date = state.today; await route(); }
 catch (error) { $('#main').innerHTML = h`<div class="empty-state"><h1>We’ll be right with you.</h1><p>${esc(error.message)}</p><a class="button button-primary" href="/">Try again</a></div>`; }
