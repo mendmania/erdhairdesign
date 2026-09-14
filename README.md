@@ -24,8 +24,8 @@ Only the super admin sees **Administrators** and can grant or revoke admin acces
 
 Administrators can manage:
 
-- **Appointments:** approve, decline, cancel, and complete visits.
-- **Working hours:** the shared salon's weekly shifts and optional outside-hours request window.
+- **Appointments:** start with today’s schedule or jump to requests, visits ready to complete, upcoming visits, and history. Search by client, email, phone, or service and filter by date. Client contact links and notes are visible on each appointment. Declines, cancellations, and completion of repeating visits have a confirmation step.
+- **Working hours:** the shared salon's weekly shifts and optional outside-hours request window. Copy Monday to Tuesday–Friday, then save to apply the changes.
 - **Time off:** inclusive date ranges for vacations, holidays, or single days. Time off blocks every new booking, including outside-hours requests. Existing active appointments must be resolved first; they are never silently cancelled.
 - **Services & prices:** add, edit, or remove services, with duration, category, description, and separate in-hours/outside-hours prices. Removed services disappear from the menu; existing appointments retain their agreed details and history. Starter services are not restored on restart.
 - **Booking rules:** automatic approval, the initial approval count, and outside-hours review.
