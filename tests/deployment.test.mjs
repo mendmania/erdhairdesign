@@ -40,3 +40,16 @@ test('shared edge additions are narrowly scoped and overwrite the client identit
   assert.match(caddy, /erdhairdesign\.erdhairdesign\.svc\.cluster\.local:3000/);
   assert.ok(!caddy.includes('rruge.com'));
 });
+
+test('Cloudflare client IPs are trusted only for matching proxy source ranges', () => {
+  const direct = render('caddy', '--hostname', 'salon.example.com');
+  assert.ok(!direct.includes('http.request.header.CF-Connecting-IP'));
+  const proxied = render('caddy', '--hostname', 'salon.example.com', '--cloudflare');
+  assert.ok(proxied.indexOf('handle @health') < proxied.indexOf('handle @cloudflare'));
+  assert.match(proxied, /handle @health \{\s+respond 404/);
+  assert.match(proxied, /remote_ip 173\.245\.48\.0\/20/);
+  assert.match(proxied, /handle @cloudflare \{\s+reverse_proxy/);
+  assert.match(proxied, /header_up X-Erd-Client-IP \{http.request.header.CF-Connecting-IP\}/);
+  assert.match(proxied, /handle \{[\s\S]*header_up X-Erd-Client-IP \{remote_host\}/);
+  assert.equal((proxied.match(/header_up -CF-Connecting-IP/g) || []).length, 2);
+});

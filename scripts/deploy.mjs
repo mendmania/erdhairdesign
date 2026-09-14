@@ -47,7 +47,7 @@ export function createDeployer(kubeconfig, run = (args, input) => execFileSync('
     return output.trim() ? JSON.parse(output) : null;
   };
   const render = (mode, options = {}) => {
-    const args = Object.entries(options).filter(([,v]) => v).flatMap(([k,v]) => [`--${k}`, v]);
+    const args = Object.entries(options).filter(([,v]) => v).flatMap(([k,v]) => v === true ? [`--${k}`] : [`--${k}`, v]);
     const result = execFileSync(process.execPath, [resolve(root, 'scripts/k3s.mjs'), mode, ...args], { encoding: 'utf8' });
     return mode === 'caddy' ? result : JSON.parse(result);
   };
@@ -85,7 +85,7 @@ export function createDeployer(kubeconfig, run = (args, input) => execFileSync('
     const app = render('app', options);
     const foundation = render('foundation');
     const edge = render('edge-policy');
-    const caddy = render('caddy', { hostname: options.hostname });
+    const caddy = render('caddy', { hostname: options.hostname, cloudflare: options.cloudflare });
     const destination = resolve(output);
     assert(!existsSync(destination), 'Output directory already exists; use a new release directory to preserve the previous plan.');
     mkdirSync(destination, { recursive: true, mode: 0o700 });
@@ -126,12 +126,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const { values, positionals } = parseArgs({ allowPositionals: true, options: {
       kubeconfig: { type: 'string' }, hostname: { type: 'string' }, image: { type: 'string' },
-      'pull-secret': { type: 'string' }, output: { type: 'string' }, 'dry-run': { type: 'boolean' },
+      'pull-secret': { type: 'string' }, cloudflare: { type: 'boolean' }, output: { type: 'string' }, 'dry-run': { type: 'boolean' },
     } });
     const command = positionals[0];
     assert(['check', 'bootstrap', 'plan', 'deploy'].includes(command), 'Usage: node scripts/deploy.mjs check|bootstrap|plan|deploy --kubeconfig PATH [--hostname HOST --image IMAGE@sha256:DIGEST --pull-secret NAME --output NEW_DIRECTORY --dry-run]');
     const deployer = createDeployer(values.kubeconfig);
-    const options = { hostname: values.hostname, image: values.image, 'pull-secret': values['pull-secret'] };
+    const options = { hostname: values.hostname, image: values.image, 'pull-secret': values['pull-secret'], cloudflare: values.cloudflare };
     if (command === 'check') console.log(JSON.stringify(deployer.check(), null, 2));
     if (command === 'bootstrap') console.log(deployer.bootstrap());
     if (command === 'plan') { assert(values.output, 'Supply --output with a new release directory.'); console.log(deployer.plan(options, values.output)); }

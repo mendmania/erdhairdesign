@@ -4,11 +4,11 @@
 
 Live cluster access was verified on September 14, 2026 using the existing Netcup direct kubeconfig. The node `netcupmaniaserver` is Ready, runs K3s v1.35.7+k3s1, and uses **linux/amd64**. The shared Caddy edge has one ready replica and already has egress isolation. SSH is unavailable, but the direct Kubernetes API connection works with certificate verification.
 
-The `erdhairdesign` namespace, non-default retained StorageClass, SQLite PVC, and default-deny policy have been created after API server dry-runs. The application is now running with one ready Pod and a bound 2Gi SQLite PVC. Both health endpoints returned HTTP 200 from inside the Pod. The dedicated email Secret is installed. No public salon route is running yet. No existing site's edge configuration was changed.
+The `erdhairdesign` namespace, non-default retained StorageClass, SQLite PVC, and default-deny policy have been created after API server dry-runs. The application is now running with one ready Pod and a bound 2Gi SQLite PVC. Both health endpoints returned HTTP 200 from inside the Pod. The dedicated email Secret is installed. The salon is publicly available at **https://tregubio.com**. Public HTTPS and the origin certificate were verified. The shared Caddy configuration was extended with only the salon route, using a new immutable ConfigMap and a resourceVersion-checked patch; existing routes and TLS volumes were retained. `rruge.com` returned HTTPS 200 after rollout.
 
 The tested AMD64 image is published; its immutable digest and successful workflow are recorded in [`release.json`](release.json). Anonymous registry access was verified, so this release does not need an image-pull Secret. All 41 tests passed locally and inside the AMD64 CI container. Application and edge-policy manifests also passed server dry-runs; placeholder validation values were never applied. `rruge.com` still returned HTTPS 200 after the isolated foundation was created.
 
-The selected temporary salon hostname is **tregubio.com** (managed in Cloudflare). Brevo credentials are installed, but Brevo rejected the server IP `159.195.30.113` with HTTP 401 during read-only validation. Authorize that IP under Brevo Settings → Security → Authorized IPs, retaining existing authorized senders/servers, then repeat account/sender validation. No email was sent. DNS/HTTPS cutover is still pending. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
+The selected temporary salon hostname is **tregubio.com** (managed in Cloudflare). Brevo now accepts the authorized server IP: authentication succeeded, transactional relay is enabled, and the configured sender is active. No verification email has yet been sent as a live test. The owner should register and verify their account, then use the admin-promotion command below. Configure real salon services, shifts, prices, and off-node database backups before taking client bookings. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
 
 ## Repeatable deployment commands
 
@@ -30,7 +30,7 @@ export SALON_HOSTNAME=tregubio.com
 export SALON_IMAGE=ghcr.io/mendmania/erdhairdesign@sha256:ACTUAL_DIGEST
 npm run k3s -- plan --kubeconfig "$SALON_KUBECONFIG" \
   --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
-  --output .runtime/k3s/release-001
+  --cloudflare --output .runtime/k3s/release-001
 ```
 
 Create the dedicated email and optional registry Secrets using section 3 below. The email Secret must contain **only** `BREVO_API_KEY` and `EMAIL_FROM`, preventing overrides of production settings. Then validate and roll out the private app:
@@ -110,7 +110,7 @@ node scripts/k3s.mjs foundation > .runtime/k3s/foundation.json
 node scripts/k3s.mjs app --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
   --pull-secret erdhairdesign-registry > .runtime/k3s/app.json
 node scripts/k3s.mjs edge-policy > .runtime/k3s/edge-policy.json
-node scripts/k3s.mjs caddy --hostname "$SALON_HOSTNAME" > .runtime/k3s/Caddyfile.salon
+node scripts/k3s.mjs caddy --hostname "$SALON_HOSTNAME" --cloudflare > .runtime/k3s/Caddyfile.salon
 ```
 
 Omit `--pull-secret` only if the selected image is intentionally accessible without it. The renderer does not change package permissions.
@@ -174,7 +174,7 @@ Check `/health/live`, `/health/ready`, and `/` on the loopback forward. Producti
 6. Point the chosen hostname's DNS to the verified server address, preserve unrelated records, and verify HTTPS using normal certificate validation. The reference VPS address is `159.195.30.113`; recheck before setting DNS. Add `www` only if explicitly desired and its DNS/TLS are also ready.
 7. Confirm `rruge.com` and the other existing hosts remain healthy. Test the salon's sign-up, Brevo email, verification, request, and admin approval through its new origin.
 
-The candidate uses Let's Encrypt through the existing Caddy edge and hides public health routes. It does not install Traefik/cert-manager, bind ports 80/443, modify DNS, or apply shared configuration automatically. When placed behind an additional CDN, revisit trusted client-IP handling with the actual proxy chain instead of trusting arbitrary forwarding headers.
+The candidate uses Let's Encrypt through the existing Caddy edge and hides public health routes. It does not install Traefik/cert-manager, bind ports 80/443, modify DNS, or apply shared configuration automatically. For this Cloudflare-proxied domain, `--cloudflare` trusts CF-Connecting-IP only when the connecting address matches Cloudflare's official IPv4/IPv6 ranges (verified September 14, 2026), otherwise using the direct remote address. The applied salon block is recorded in `Caddyfile.tregubio`. The active ConfigMap is `erdhairdesign-edge-497262a88fcc`; its predecessor `erdhairdesign-edge-5d58ba402184` and the pre-salon `edge-caddy-trade-removed-bfa774f3e0` remain available. Re-read the live deployment before any rollback, and change only its Caddyfile volume reference after a resourceVersion check. Never restore an entire old shared Deployment. Full local before/candidate snapshots remain under the ignored `.runtime/k3s/edge-tregubio` directory.
 
 ## Admin setup, upgrades, and recovery
 

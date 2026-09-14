@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  hostname: { type: 'string' }, image: { type: 'string' }, 'pull-secret': { type: 'string' },
+  hostname: { type: 'string' }, image: { type: 'string' }, 'pull-secret': { type: 'string' }, cloudflare: { type: 'boolean' },
 } });
 const mode = positionals[0];
 const ns = 'erdhairdesign';
@@ -74,7 +74,45 @@ function edgePolicy() {
 }
 try {
   if (mode === 'caddy') {
-    console.log(`# BEGIN ERD HAIR DESIGN\n${hostname()} {\n  tls {\n    issuer acme {\n      dir https://acme-v02.api.letsencrypt.org/directory\n    }\n  }\n  encode zstd gzip\n  request_body {\n    max_size 32KB\n  }\n  @health path /health/*\n  respond @health 404\n  reverse_proxy erdhairdesign.erdhairdesign.svc.cluster.local:3000 {\n    header_up X-Erd-Client-IP {remote_host}\n    header_up -Authorization\n    header_up -X-Real-IP\n    header_up -True-Client-IP\n    header_up -CF-Connecting-IP\n    header_up -Forwarded\n  }\n}\n# END ERD HAIR DESIGN`);
+    // Official ranges verified 2026-09-14: https://www.cloudflare.com/ips-v4/ and /ips-v6/.
+    const cloudflareRanges = '173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32';
+    const proxy = client => `reverse_proxy erdhairdesign.erdhairdesign.svc.cluster.local:3000 {
+      header_up X-Erd-Client-IP ${client}
+      header_up -Authorization
+      header_up -X-Forwarded-For
+      header_up -X-Real-IP
+      header_up -True-Client-IP
+      header_up -CF-Connecting-IP
+      header_up -Forwarded
+    }`;
+    const routing = values.cloudflare ? `@cloudflare {
+    remote_ip ${cloudflareRanges}
+    header CF-Connecting-IP *
+  }
+  handle @cloudflare {
+    ${proxy('{http.request.header.CF-Connecting-IP}')}
+  }
+  handle {
+    ${proxy('{remote_host}')}
+  }` : proxy('{remote_host}');
+    console.log(`# BEGIN ERD HAIR DESIGN
+${hostname()} {
+  tls {
+    issuer acme {
+      dir https://acme-v02.api.letsencrypt.org/directory
+    }
+  }
+  encode zstd gzip
+  request_body {
+    max_size 32KB
+  }
+  @health path /health/*
+  handle @health {
+    respond 404
+  }
+  ${routing}
+}
+# END ERD HAIR DESIGN`);
   } else {
     const items = mode === 'foundation' ? foundation() : mode === 'app' ? app() : mode === 'edge-policy' ? edgePolicy() : null;
     if (!items) throw new Error('Usage: node scripts/k3s.mjs foundation|app|edge-policy|caddy [--hostname HOST] [--image IMAGE@sha256:DIGEST] [--pull-secret NAME]');

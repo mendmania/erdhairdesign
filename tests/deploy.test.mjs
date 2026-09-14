@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createDeployer, validateCluster, assertOwned, expectedServer } from '../scripts/deploy.mjs';
 
 const owned = { 'app.kubernetes.io/part-of': 'erdhairdesign' };
@@ -82,4 +85,13 @@ test('application dry-run is nonmutating and a real deploy waits for rollout wit
   const manifests = real.calls.filter(c => c.input).map(c => JSON.parse(c.input));
   assert.ok(manifests.every(m => m.items.every(r => r.metadata.namespace === 'erdhairdesign' && r.kind !== 'Secret')));
   assert.ok(real.calls.every(c => c.args[0] === '--kubeconfig' && c.args[1] === '/tmp/explicit-salon-kubeconfig'));
+});
+
+test('release plans preserve the chosen Cloudflare proxy mode', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'salon-plan-'));
+  try {
+    const { deployer } = fake();
+    const output = deployer.plan({ ...options, cloudflare: true }, join(temp, 'release'));
+    assert.match(readFileSync(join(output, 'Caddyfile.salon'), 'utf8'), /handle @cloudflare/);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
 });

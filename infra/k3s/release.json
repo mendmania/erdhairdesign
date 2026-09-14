@@ -5,9 +5,14 @@
   "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34821809022",
   "tests": 41,
   "clusterFoundation": "created",
-  "applicationRollout": "ready inside cluster; public cutover pending",
+  "applicationRollout": "live at https://tregubio.com",
   "anonymousPull": true,
   "hostname": "tregubio.com",
-  "emailValidation": "Brevo rejected server IP 159.195.30.113 with HTTP 401; authorization required",
-  "storage": "2Gi PVC bound"
+  "emailValidation": "server authenticated; transactional relay enabled; configured sender active; inbox delivery not yet tested",
+  "storage": "2Gi PVC bound",
+  "publicUrl": "https://tregubio.com",
+  "edgeConfigMap": "erdhairdesign-edge-497262a88fcc",
+  "previousEdgeConfigMap": "erdhairdesign-edge-5d58ba402184",
+  "cloudflareProxy": true,
+  "deploymentTests": 43
 }
