@@ -1,5 +1,5 @@
-import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js';
-import { selectAppointments } from './admin-view.js';
+import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260914-i18n';
+import { selectAppointments } from './admin-view.js?v=20260914-i18n';
 try { setLanguage(localStorage.getItem('erd-language') || (navigator.language.startsWith('sq') ? 'sq' : 'en')); } catch {}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
