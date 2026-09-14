@@ -53,7 +53,7 @@ Future repeats do not reserve an entire series of slots in advance. If the next 
 
 ## Live email and production
 
-For the existing k3s server that hosts `rruge.com`, use the [salon k3s deployment runbook](infra/k3s/README.md). It includes a pinned Docker image build, persistent SQLite storage, health checks, and an additive route through the shared Caddy edge. The verified cluster now has the salon namespace and retained storage foundation. The deployment helper and GHCR release workflow are implemented; public launch still requires the salon hostname, Brevo configuration, and a published image. No public salon route is running yet.
+For the existing k3s server that hosts `rruge.com`, use the [salon k3s deployment runbook](infra/k3s/README.md). It includes a pinned Docker image build, persistent SQLite storage, health checks, and an additive route through the shared Caddy edge. The verified cluster now has the salon namespace and retained storage foundation. The deployment helper is implemented and the tested AMD64 image is published to GHCR; public launch still requires the salon hostname and Brevo configuration. No public salon route is running yet.
 
 Email verification uses the [Brevo transactional email API](https://developers.brevo.com/reference/send-transac-email). In Brevo, enable transactional email, verify your sender and authenticate its domain, then create an **API key** under **SMTP & API → API Keys**. This integration uses the HTTP API, so an SMTP key or SMTP password is not needed. Add these values to the git-ignored `.env` file:
 

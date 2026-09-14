@@ -1,0 +1,10 @@
+{
+  "sourceCommit": "f79030a8182de1070588a0365226c9bf6a79daea",
+  "image": "ghcr.io/mendmania/erdhairdesign@sha256:3c0cafc87e0d61b2d259e93f6364f443e52c2cd78a28295984f49660253a1504",
+  "platform": "linux/amd64",
+  "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34821809022",
+  "tests": 41,
+  "clusterFoundation": "created",
+  "applicationRollout": "pending hostname and runtime credentials",
+  "anonymousPull": true
+}

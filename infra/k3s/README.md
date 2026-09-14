@@ -6,7 +6,9 @@ Live cluster access was verified on September 14, 2026 using the existing Netcup
 
 The `erdhairdesign` namespace, non-default retained StorageClass, SQLite PVC, and default-deny policy have been created after API server dry-runs. The PVC waits for its first consuming Pod before provisioning; Pending is expected before the app is deployed. No application Pod or public salon route is running yet. No existing site's edge configuration was changed.
 
-Still needed for public launch: the salon hostname, Brevo API key and verified sender, an immutable published image, and image-pull access if the registry package is private. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
+The tested AMD64 image is published; its immutable digest and successful workflow are recorded in [`release.json`](release.json). Anonymous registry access was verified, so this release does not need an image-pull Secret. All 41 tests passed locally and inside the AMD64 CI container. Application and edge-policy manifests also passed server dry-runs; placeholder validation values were never applied. `rruge.com` still returned HTTPS 200 after the isolated foundation was created.
+
+Still needed for public launch: the salon hostname and Brevo API key with a verified sender. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
 
 ## Repeatable deployment commands
 
@@ -19,7 +21,7 @@ npm run k3s -- check --kubeconfig "$SALON_KUBECONFIG"
 npm run k3s -- bootstrap --kubeconfig "$SALON_KUBECONFIG"
 ```
 
-`.github/workflows/container.yml` tests the application and builds the runtime image for pull requests and main pushes. Run **Test and publish salon image** manually on `main` to publish the tested AMD64 image to this repository's GHCR package. The job uses its short-lived GitHub token, pinned action revisions, and records an immutable image digest in the run summary. It does not grant GitHub cluster access or change package visibility. Until the workflow is pushed and run, no image is published by this implementation.
+`.github/workflows/container.yml` tests the application and builds the runtime image for pull requests and main pushes. Run **Test and publish salon image** manually on `main` to publish the tested AMD64 image to this repository's GHCR package. The job uses its short-lived GitHub token, pinned action revisions, and records an immutable image digest in the run summary. It does not grant GitHub cluster access or change package visibility. The first publication completed successfully; see `release.json` for the tested source commit, image digest, and workflow URL.
 
 After selecting the hostname and the published digest, generate a new release directory (existing directories are never overwritten):
 
@@ -28,7 +30,7 @@ export SALON_HOSTNAME=your-actual-salon-domain.com
 export SALON_IMAGE=ghcr.io/mendmania/erdhairdesign@sha256:ACTUAL_DIGEST
 npm run k3s -- plan --kubeconfig "$SALON_KUBECONFIG" \
   --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
-  --pull-secret erdhairdesign-registry --output .runtime/k3s/release-001
+  --output .runtime/k3s/release-001
 ```
 
 Create the dedicated email and optional registry Secrets using section 3 below. The email Secret must contain **only** `BREVO_API_KEY` and `EMAIL_FROM`, preventing overrides of production settings. Then validate and roll out the private app:
@@ -36,10 +38,9 @@ Create the dedicated email and optional registry Secrets using section 3 below. 
 ```sh
 npm run k3s -- deploy --kubeconfig "$SALON_KUBECONFIG" \
   --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
-  --pull-secret erdhairdesign-registry --dry-run
+  --dry-run
 npm run k3s -- deploy --kubeconfig "$SALON_KUBECONFIG" \
-  --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
-  --pull-secret erdhairdesign-registry
+  --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE"
 ```
 
 Omit `--pull-secret` only for an image accessible without authentication. A successful rollout means the app is ready **inside the cluster**. Complete the shared edge/DNS steps below and verify HTTPS/email before announcing it publicly. Before an upgrade, take a consistent database backup; the helper never performs an automatic data rollback.
@@ -84,7 +85,7 @@ docker buildx build --platform linux/amd64 --target runtime \
   --tag "ghcr.io/mendmania/erdhairdesign:$SALON_RELEASE" --push .
 ```
 
-Set `SALON_IMAGE` to the resulting `ghcr.io/mendmania/erdhairdesign@sha256:...` digest. The manifest renderer rejects mutable image tags. For a private image, create a dedicated image-pull Secret in the salon namespace from an authorized read-only registry config. Do not print credentials or assume another application's pull credential is authorized for this package.
+Set `SALON_IMAGE` to the resulting `ghcr.io/mendmania/erdhairdesign@sha256:...` digest. The manifest renderer rejects mutable image tags. For a private image, create a dedicated image-pull Secret in the salon namespace from an authorized read-only registry config. The release currently recorded in `release.json` was verified anonymously accessible and needs no pull Secret. Do not print credentials or assume another application's pull credential is authorized for this package.
 
 ## 2. Select the correct cluster and render
 
