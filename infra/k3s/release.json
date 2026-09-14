@@ -1,9 +1,9 @@
 {
-  "sourceCommit": "bb4b45c53de33e7b6fb1042c735018874a134758",
-  "image": "ghcr.io/mendmania/erdhairdesign@sha256:1f008f0b6bcd0bc99e4dc64cf771dccc73d18aa73383e75fc51b7b432189f16d",
+  "sourceCommit": "2bf49f8bbb5b95b2c2fd7b8b1c19717b9a6cfda9",
+  "image": "ghcr.io/mendmania/erdhairdesign@sha256:6c2515be7dd007d10c315cf86a0c46c8eab4692b11522eac2573ab41691e5f8b",
   "platform": "linux/amd64",
-  "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34840222022",
-  "tests": 59,
+  "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34841473782",
+  "tests": 61,
   "clusterFoundation": "created",
   "applicationRollout": "live at https://tregubio.com",
   "anonymousPull": true,
@@ -14,9 +14,9 @@
   "edgeConfigMap": "erdhairdesign-edge-497262a88fcc",
   "previousEdgeConfigMap": "erdhairdesign-edge-5d58ba402184",
   "cloudflareProxy": true,
-  "deploymentTests": 59,
+  "deploymentTests": 61,
   "ownerRole": "mendmania@gmail.com verified as protected super_admin",
   "databaseBackup": "Consistent pre-language-migration backup saved privately; integrity_check passed before and after deployment",
-  "publicAssetVerification": "Versioned app.js, i18n.js, locales/sq.js and style.css match source; public HTML has new font and asset references; bootstrap healthy",
-  "interfaceValidation": "Epic-inspired charcoal/gold design with Inter and Bodoni Moda; English/Albanian desktop and 320px/390px mobile checks passed; one-tap service selection, week navigation, repeat disclosure and full isolated booking verified; fields 16px and main actions 52px or larger; live availability flow verified"
+  "publicAssetVerification": "All clean public and admin page paths serve the release HTML; versioned app.js, routes.js and i18n.js match source; public bootstrap healthy",
+  "interfaceValidation": "Clean URLs and legacy hash conversion verified; incremental booking selections preserve header and photo; browser Back/Forward preserves selections and unsaved details; admin section navigation and direct refresh verified in isolated preview; production navigation to /services verified"
 }
