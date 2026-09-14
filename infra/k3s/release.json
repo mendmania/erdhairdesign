@@ -5,6 +5,7 @@
   "workflowRun": "https://github.com/mendmania/erdhairdesign/actions/runs/34821809022",
   "tests": 41,
   "clusterFoundation": "created",
-  "applicationRollout": "pending hostname and runtime credentials",
-  "anonymousPull": true
+  "applicationRollout": "pending Brevo configuration and domain cutover",
+  "anonymousPull": true,
+  "hostname": "tregubio.com"
 }

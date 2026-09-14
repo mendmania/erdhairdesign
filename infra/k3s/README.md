@@ -8,7 +8,7 @@ The `erdhairdesign` namespace, non-default retained StorageClass, SQLite PVC, an
 
 The tested AMD64 image is published; its immutable digest and successful workflow are recorded in [`release.json`](release.json). Anonymous registry access was verified, so this release does not need an image-pull Secret. All 41 tests passed locally and inside the AMD64 CI container. Application and edge-policy manifests also passed server dry-runs; placeholder validation values were never applied. `rruge.com` still returned HTTPS 200 after the isolated foundation was created.
 
-Still needed for public launch: the salon hostname and Brevo API key with a verified sender. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
+The selected temporary salon hostname is **tregubio.com** (managed in Cloudflare). Still needed for public launch: Brevo API key with a verified sender and the DNS/HTTPS cutover. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
 
 ## Repeatable deployment commands
 
@@ -23,10 +23,10 @@ npm run k3s -- bootstrap --kubeconfig "$SALON_KUBECONFIG"
 
 `.github/workflows/container.yml` tests the application and builds the runtime image for pull requests and main pushes. Run **Test and publish salon image** manually on `main` to publish the tested AMD64 image to this repository's GHCR package. The job uses its short-lived GitHub token, pinned action revisions, and records an immutable image digest in the run summary. It does not grant GitHub cluster access or change package visibility. The first publication completed successfully; see `release.json` for the tested source commit, image digest, and workflow URL.
 
-After selecting the hostname and the published digest, generate a new release directory (existing directories are never overwritten):
+Using the selected hostname and published digest, generate a new release directory (existing directories are never overwritten):
 
 ```sh
-export SALON_HOSTNAME=your-actual-salon-domain.com
+export SALON_HOSTNAME=tregubio.com
 export SALON_IMAGE=ghcr.io/mendmania/erdhairdesign@sha256:ACTUAL_DIGEST
 npm run k3s -- plan --kubeconfig "$SALON_KUBECONFIG" \
   --hostname "$SALON_HOSTNAME" --image "$SALON_IMAGE" \
@@ -93,7 +93,7 @@ Use the actual authorized kubeconfig and selected hostname:
 
 ```sh
 export SALON_KUBECONFIG=/secure/path/to/the-rruge-cluster.yaml
-export SALON_HOSTNAME=your-actual-salon-domain.com
+export SALON_HOSTNAME=tregubio.com
 export SALON_IMAGE=ghcr.io/mendmania/erdhairdesign@sha256:ACTUAL_DIGEST
 
 salon_kubectl() { kubectl --kubeconfig "$SALON_KUBECONFIG" "$@"; }
