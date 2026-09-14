@@ -251,7 +251,7 @@ async function loadSlots() {
   } catch (error) {
     if (request === availabilityRequest) { state.slot = null; state.slotsError = true; }
     throw error;
-  } finally { if (request === availabilityRequest) { state.slotsLoading = false; render(); } }
+  } finally { if (request === availabilityRequest) { state.slotsLoading = false; if (state.route === 'book') render(); } }
 }
 async function route() {
   const request = ++routeRequest;
@@ -300,7 +300,7 @@ async function action(button) {
     routeRequest++;
     state.serviceId = button.dataset.id; state.slot = null; state.step = 1; state.route = 'book';
     if (location.pathname !== '/book') history.pushState(null, '', '/book');
-    render(); await loadSlots(); if (state.step === 1) focusBookingStep();
+    render(); await loadSlots(); if (state.route === 'book' && state.step === 1) focusBookingStep();
   }
   if (a === 'next') { if (!state.slot || state.slotsLoading) return; state.step = 2; render(); focusBookingStep(); }
   if (a === 'step') { state.step = Number(button.dataset.step); render(); focusBookingStep(); if (state.step === 1) await loadSlots(); }
