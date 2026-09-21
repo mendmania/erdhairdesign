@@ -67,6 +67,8 @@ Future repeats do not reserve an entire series of slots in advance. If the next 
 
 ## Live email and production
 
+Pushes to `main` now run tests, publish the salon image, and run the production deployment job. Pull requests only test/build. One-time server access and the dedicated GitHub production credential must be configured using `node scripts/setup-ci.mjs --kubeconfig /path/to/owner-kubeconfig`; see the [automatic release setup](infra/k3s/README.md#automatic-production-releases). Missing credentials cause an explicit failure, rather than reporting an undeployed build as live. The release job takes a consistent database backup before upgrading, preserves live settings/storage, and verifies the public site.
+
 For the existing k3s server that hosts `rruge.com`, use the [salon k3s deployment runbook](infra/k3s/README.md). It includes a pinned Docker image build, persistent SQLite storage, health checks, and an additive route through the shared Caddy edge. The verified cluster now has the salon namespace and retained storage foundation. The deployment helper is implemented and the tested AMD64 image is published to GHCR; the app is live at [tregubio.com](https://tregubio.com) through the shared Caddy edge and Cloudflare. Brevo authentication and the sender were validated from k3s; inbox delivery still needs a real registration test.
 
 Email verification uses the [Brevo transactional email API](https://developers.brevo.com/reference/send-transac-email). In Brevo, enable transactional email, verify your sender and authenticate its domain, then create an **API key** under **SMTP & API → API Keys**. This integration uses the HTTP API, so an SMTP key or SMTP password is not needed. Add these values to the git-ignored `.env` file:

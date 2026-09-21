@@ -1,4 +1,4 @@
-name: Test and publish salon image
+name: Test, publish and deploy salon
 on:
   pull_request:
   push:
@@ -21,8 +21,10 @@ jobs:
       - name: Build the runtime image
         run: docker build --target runtime --tag erdhairdesign:checked .
   publish:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
+    outputs:
+      image: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,3 +64,76 @@ jobs:
         run: |
           echo 'Use this immutable image with scripts/deploy.mjs:' >> "$GITHUB_STEP_SUMMARY"
           echo "\`$IMAGE@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: production
+      url: https://tregubio.com
+    concurrency:
+      group: salon-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.16.0'
+      - name: Skip superseded commits
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if [ "$(gh api repos/mendmania/erdhairdesign/git/ref/heads/main --jq '.object.sha')" = "$RELEASE_SHA" ]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'A newer main commit exists; this release was skipped.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Load the salon deployment credential
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          SALON_KUBECONFIG: ${{ secrets.SALON_KUBECONFIG }}
+        run: |
+          if [ -z "$SALON_KUBECONFIG" ]; then
+            echo '::error::Production setup is incomplete. Run scripts/setup-ci.mjs from a machine that can reach the salon Kubernetes API.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$SALON_KUBECONFIG" > "$RUNNER_TEMP/salon-kubeconfig.json"
+      - name: Install a verified Kubernetes client
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          KUBECTL_VERSION: v1.35.7
+        run: |
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --retry 3 -o kubectl "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl"
+          curl --fail --silent --show-error --location --retry 3 -o kubectl.sha256 "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl.sha256"
+          printf '%s  kubectl\n' "$(cat kubectl.sha256)" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/salon-tools"
+          install -m 0755 kubectl "$RUNNER_TEMP/salon-tools/kubectl"
+          echo "$RUNNER_TEMP/salon-tools" >> "$GITHUB_PATH"
+      - name: Back up, deploy and verify production
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_IMAGE: ${{ needs.publish.outputs.image }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_RUN: ${{ github.run_id }}
+          RELEASE_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          node scripts/release.mjs --kubeconfig "$RUNNER_TEMP/salon-kubeconfig.json" \
+            --image "$RELEASE_IMAGE" --revision "$RELEASE_SHA" \
+            --run-id "$RELEASE_RUN" --attempt "$RELEASE_ATTEMPT" > "$RUNNER_TEMP/salon-release.json"
+          echo 'Production verified at https://tregubio.com' >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/salon-release.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the temporary credential
+        if: always()
+        run: rm -f "$RUNNER_TEMP/salon-kubeconfig.json"

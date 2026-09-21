@@ -10,6 +10,34 @@ The tested AMD64 image is published; its immutable digest and successful workflo
 
 The selected temporary salon hostname is **tregubio.com** (managed in Cloudflare). Brevo now accepts the authorized server IP: authentication succeeded, transactional relay is enabled, and the configured sender is active. No verification email has yet been sent as a live test. The owner should register and verify their account, then use the admin-promotion command below. Configure real salon services, shifts, prices, and off-node database backups before taking client bookings. The application uses `/`, so choose a hostname rather than a subpath such as `rruge.com/salon`.
 
+## Automatic production releases
+
+The `Test, publish and deploy salon` workflow now runs tests, publishes an immutable AMD64 image, and upgrades **only the existing salon deployment** after every push to `main`. Pull requests only test/build. **Run workflow** on `main` can retry a release. Publishing an image alone is not a successful deployment: the production job must also pass.
+
+One-time activation (run from an owner machine that can reach the verified Kubernetes API):
+
+```sh
+node scripts/setup-ci.mjs --kubeconfig /path/to/netcup-k3s-admin-direct.yaml
+```
+
+The setup verifies the cluster and existing salon, creates the scoped identity defined in `github-deployer.json`, and stores **only that identity** as `SALON_KUBECONFIG` in this repository's **production** environment. The owner kubeconfig is never uploaded. The environment is limited to the `main` branch; existing environment protections are preserved. No GitHub approval gate is added. Both an authenticated `gh` CLI with repository administration access and the owner kubeconfig are needed for this one-time operation.
+
+The deployment identity can get/watch/patch the named salon Deployment, inspect salon-namespace pods, and execute the database-backup and health-check commands there. It cannot read Kubernetes Secret objects, change RBAC, delete storage, or manage the shared edge or other namespaces. Deployment/exec access is still production access: restrict who can push or merge workflow changes to `main`. This external runner uses a dedicated persistent service-account token, which can be revoked by deleting the token Secret printed by setup. Rotate it by rerunning setup, confirming a successful deployment, and then deleting the old token Secret. [Kubernetes documents this token mechanism and recommends short-lived tokens where supported](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/); this setup does not change the shared API server to add an OIDC provider.
+
+GitHub-hosted runners must be able to reach the verified API at `https://159.195.30.113:6443`. If the endpoint is accessible only through a private network, arrange an approved runner/network connection before enabling deployment; do not disable TLS verification. The deployment job fails explicitly if its credential is missing. **As of this change, the saved API address timed out from the development machine and the saved SSH identity was rejected, so live credential provisioning and a production rollout could not be verified.** Run setup once access is restored, then re-run the latest `main` workflow.
+
+Each upgrade:
+
+1. Rejects stale `main` commits, wrong clusters, unhealthy starting deployments, unexpected containers, or changed storage.
+2. Server-dry-runs an update to the image and source-revision annotation, preserving all other live configuration.
+3. Uses SQLite's online backup API inside the running salon pod, validates the snapshot, and saves it privately at `/data/backups/release-COMMIT-RUN-ATTEMPT.sqlite` with owner-only permissions. A backup failure prevents the upgrade.
+4. Rechecks the latest source and current deployment before applying a resource-version-guarded patch. Production jobs are serialized and an in-progress deployment is not cancelled by a newer push.
+5. Waits for rollout and internal health checks, then compares the public `/app.js` with the exact checkout and checks `/api/bootstrap` at `https://tregubio.com`.
+
+There is a short salon interruption with the existing single-instance Recreate strategy. No edge/DNS changes, Secret changes, automatic image rollback, or automatic database restoration happen during release. The workflow summary records the deployed and previous image digests plus the backup path. Snapshots remain on the current PVC; they are not off-node disaster recovery and are never uploaded as public workflow artifacts. Monitor disk usage and archive/prune reviewed old snapshots as part of the backup routine.
+
+The main-branch environment restriction follows [GitHub's deployment-environment controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+
 ## Repeatable deployment commands
 
 The checked-in helper always requires an explicit kubeconfig and verifies the API server, node identity, AMD64 architecture, edge labels/readiness, storage provisioner, and existing edge egress isolation. It rejects resource-name collisions with other owners, validates manifests with the API server before applying them, and waits for app readiness. It does not modify shared Caddy routes, DNS, Secrets, or existing booking data. Run it from the repository with Node 22.16+ and kubectl installed.
@@ -21,7 +49,7 @@ npm run k3s -- check --kubeconfig "$SALON_KUBECONFIG"
 npm run k3s -- bootstrap --kubeconfig "$SALON_KUBECONFIG"
 ```
 
-`.github/workflows/container.yml` tests the application and builds the runtime image for pull requests and main pushes. Run **Test and publish salon image** manually on `main` to publish the tested AMD64 image to this repository's GHCR package. The job uses its short-lived GitHub token, pinned action revisions, and records an immutable image digest in the run summary. It does not grant GitHub cluster access or change package visibility. The first publication completed successfully; see `release.json` for the tested source commit, image digest, and workflow URL.
+The workflow tests pull requests and automatically publishes/deploys successful `main` pushes after the one-time setup above. The publishing job uses its short-lived GitHub token and pinned action revisions, without changing package visibility. `release.json` records an earlier manual release; the latest successful production workflow summary is the source of truth for automatic releases.
 
 Using the selected hostname and published digest, generate a new release directory (existing directories are never overwritten):
 

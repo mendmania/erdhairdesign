@@ -10,5 +10,12 @@
 !scripts/admin.mjs
 !scripts/k3s.mjs
 !scripts/deploy.mjs
+!scripts/release.mjs
+!infra/
+!infra/k3s/
+!infra/k3s/github-deployer.json
+!.github/
+!.github/workflows/
+!.github/workflows/container.yml
 !tests/
 !tests/**

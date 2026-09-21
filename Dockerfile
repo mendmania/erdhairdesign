@@ -8,8 +8,10 @@ RUN mkdir -p /data && chown node:node /data
 USER 1000:1000
 
 FROM base AS test
-COPY --chown=node:node scripts/k3s.mjs scripts/deploy.mjs ./scripts/
+COPY --chown=node:node scripts/k3s.mjs scripts/deploy.mjs scripts/release.mjs ./scripts/
 COPY --chown=node:node tests/ ./tests/
+COPY --chown=node:node infra/k3s/github-deployer.json ./infra/k3s/github-deployer.json
+COPY --chown=node:node .github/workflows/container.yml ./.github/workflows/container.yml
 RUN node --test tests/*.test.mjs
 
 FROM base AS runtime
