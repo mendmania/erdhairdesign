@@ -1,3 +1,4 @@
+import { createNotificationWorker, notificationInbox, markNotificationsRead, notificationPreferences, saveNotificationPreferences, retryNotificationEmails } from './lib/notifications.mjs';
 import { pagePath } from './public/routes.js';
 import { isAdmin, isSuperAdmin } from './lib/roles.mjs';
 import { setAdmin, addVacation, saveService, removeService } from './lib/admin.mjs';
@@ -7,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
 import { isIP } from 'node:net';
 import { openStore, settingsFor, transaction } from './lib/store.mjs';
-import { AppError, demand, availability, createBooking, changeBooking, updateSettings, localDate } from './lib/booking.mjs';
+import { AppError, demand, availability, createBooking, createAdminBooking, changeBooking, updateSettings, localDate } from './lib/booking.mjs';
 import { register, passwordMatches, passwordHash, sessionUser, publicUser, createSession, sendVerification, verifyEmail, validateDetails, hash } from './lib/auth.mjs';
 
 const root = fileURLToPath(new URL('./public/', import.meta.url));
@@ -16,6 +17,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
   const dummyPassword = passwordHash('dummy-password-never-used');
   const limits = new Map();
   const mail = { production, apiKey, from };
+  const notifications = createNotificationWorker(db, {apiKey, from, appUrl});
   function rateLimit(req, group, max) {
     const forwarded = req.headers['x-erd-client-ip'];
     const address = trustProxy && typeof forwarded === 'string' && isIP(forwarded) ? forwarded : req.socket.remoteAddress;
@@ -27,7 +29,8 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
     entry.count++; limits.set(key, entry);
     demand(entry.count <= max, 'Too many attempts. Please try again in 15 minutes.', 429);
   }
-  return createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
+    if (req.method === 'POST' && (req.url.startsWith('/api/bookings') || req.url.startsWith('/api/admin/bookings') || req.url === '/api/admin/notification-settings/retry')) res.once('finish', () => { notifications.kick(); });
     const json = (value, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
     const cookie = token => res.setHeader('Set-Cookie', `erd_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token ? 604800 : 0}${production ? '; Secure' : ''}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -123,8 +126,15 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
         requireUser(); return json({ booking: changeBooking(db, user, url.pathname.split('/')[3], input.action) });
       }
       if (url.pathname.startsWith('/api/admin/')) { requireUser(); demand(isAdmin(user) && user.verified, 'Admin access is required.', 403); }
+      if (route === 'GET /api/admin/notifications') return json(notificationInbox(db, user.id));
+      if (route === 'POST /api/admin/notifications/read') return json(markNotificationsRead(db, user.id, input));
+      if (route === 'GET /api/admin/notification-settings') return json({...notificationPreferences(db, user), emailConfigured: Boolean(apiKey && from)});
+      if (route === 'PUT /api/admin/notification-settings') return json({...saveNotificationPreferences(db, user, input), emailConfigured: Boolean(apiKey && from)});
+      if (route === 'POST /api/admin/notification-settings/retry') return json({...retryNotificationEmails(db, user), emailConfigured: Boolean(apiKey && from)});
+      if (route === 'GET /api/admin/clients') return json({ clients: db.prepare('SELECT id,name,email,phone FROM users ORDER BY name,email').all() });
+      if (route === 'POST /api/admin/bookings') return json({ booking: createAdminBooking(db, user, input) }, 201);
       if (route === 'GET /api/admin/dashboard') {
-        return json({ bookings: db.prepare('SELECT b.*, u.name, u.email, u.phone, u.approvals FROM bookings b JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC').all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services WHERE active = 1').all(), vacations: db.prepare('SELECT * FROM vacations ORDER BY start_date').all(), ...(isSuperAdmin(user) ? { admins: db.prepare("SELECT id,name,email,role FROM users WHERE role IN ('admin','super_admin') ORDER BY role DESC,name").all() } : {}) });
+        return json({ bookings: db.prepare("SELECT b.*, COALESCE(u.name,b.guest_name) AS name, COALESCE(u.email,'') AS email, COALESCE(u.phone,b.guest_phone) AS phone, COALESCE(u.approvals,0) AS approvals FROM bookings b LEFT JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC").all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services WHERE active = 1').all(), vacations: db.prepare('SELECT * FROM vacations ORDER BY start_date').all(), ...(isSuperAdmin(user) ? { admins: db.prepare("SELECT id,name,email,role FROM users WHERE role IN ('admin','super_admin') ORDER BY role DESC,name").all() } : {}) });
       }
       if (route === 'PUT /api/admin/settings') return json({ settings: updateSettings(db, input) });
       if (route === 'PUT /api/admin/team') return json(setAdmin(db, user, input.email, input.role));
@@ -159,6 +169,10 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       else res.end();
     }
   });
+  server.once('listening', () => notifications.start());
+  server.once('close', () => { notifications.stop(); });
+  server.stopNotifications = () => notifications.stop();
+  return server;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -173,7 +187,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   function shutdown() {
     if (stopping) return;
     stopping = true;
-    server.close(() => { db.close(); process.exit(0); });
+    server.close(async () => { await server.stopNotifications(); db.close(); process.exit(0); });
     setTimeout(() => { server.closeAllConnections(); process.exit(1); }, 25000).unref();
   }
   process.on('SIGTERM', shutdown);

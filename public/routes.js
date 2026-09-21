@@ -10,6 +10,7 @@ export const pages = {
   '/admin/time-off': { name: 'admin', adminTab: 'vacations' },
   '/admin/services': { name: 'admin', adminTab: 'prices' },
   '/admin/booking-rules': { name: 'admin', adminTab: 'rules' },
+  '/admin/notifications': { name: 'admin', adminTab: 'notifications' },
   '/admin/team': { name: 'admin', adminTab: 'team' },
 };
 export const pagePath = pathname => {

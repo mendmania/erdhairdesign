@@ -32,6 +32,9 @@ Only the super admin sees **Administrators** and can grant or revoke admin acces
 
 Administrators can manage:
 
+- **Manual reservations:** in **Appointments**, choose **Reserve for client**. Select an existing account or enter a guest’s name and phone number, then choose a service, date, available time, and optional notes. The reservation is immediately confirmed, blocks the shared calendar, and can be cancelled or completed like any other visit. No account or email verification is needed for a guest; existing-account bookings appear in **My visits** and count as a manual approval. These are one-off visits, respect hours/time off/prices, and retain the one-active-visit limit for registered accounts.
+- **Notifications:** each administrator has an unread badge and an inbox for new reservations (including renewed repeats) and cancellations. **View reservation** opens the exact appointment, including cancelled visits. Read status is personal; marking all read leaves later arrivals unread. The panel refreshes alerts every 30 seconds while visible.
+- **Email recipients (super admin only):** open **Notifications**, select the verified administrators who should receive email, choose English or Albanian, and save. Initially nobody is selected. Regular admins cannot read or change these settings through the API. Deselecting someone cancels their unsent emails; removing their admin access also removes them from recipients. The admin who creates or cancels a reservation is excluded from their own alert; other selected admins are notified.
 - **Appointments:** start with today’s schedule or jump to requests, visits ready to complete, upcoming visits, and history. Search by client, email, phone, or service and filter by date. Client contact links and notes are visible on each appointment. Declines, cancellations, and completion of repeating visits have a confirmation step.
 - **Working hours:** the shared salon's weekly shifts and optional outside-hours request window. Copy Monday to Tuesday–Friday, then save to apply the changes.
 - **Time off:** inclusive date ranges for vacations, holidays, or single days. Time off blocks every new booking, including outside-hours requests. Existing active appointments must be resolved first; they are never silently cancelled.
@@ -83,6 +86,10 @@ Run `npm start` behind an HTTPS reverse proxy on that domain. Production fails t
 
 Use persistent storage for the SQLite database and back it up. Run a single application instance for this starter. Built-in rate limits use the direct connection address by default. The k3s package enables `TRUST_PROXY=true` only with its isolated ingress and Caddy configuration, which overwrites `X-Erd-Client-IP` with the client address. Leave this setting false for direct/public application listeners.
 
+Booking notification jobs are saved in SQLite in the same transaction as the reservation. A background worker uses the existing `BREVO_API_KEY`, `EMAIL_FROM`, and `APP_URL`; no separate email service is needed. Each recipient receives an individual email with the client name, service, salon date/time, status, and a sign-in-protected admin link. Notes and phone numbers are not included. Failures retry with increasing delays, up to eight attempts; the super admin can inspect queued/failed counts and retry failed emails in **Notifications**. Jobs survive restarts. Delivery rechecks access and selected recipients, and skips stale new-reservation emails for cancelled/completed visits. An email already being sent cannot be recalled. When email is unconfigured locally, jobs remain queued and no messages are sent. Notification settings apply to future events and do not send past inbox items retroactively.
+
+The worker reuses a stable UUID for each recipient’s [Brevo idempotency key](https://developers.brevo.com/docs/heterogenous-versions-batch-emails). This reduces duplicate sends after short network interruptions; delivery is not guaranteed exactly once after a provider’s deduplication window expires. Provider acceptance is recorded as sent; it does not confirm inbox delivery.
+
 Passwords use salted scrypt hashes. Sessions use random, hashed server-side tokens with HttpOnly, SameSite cookies and Secure cookies in production. Verification codes expire after 10 minutes, allow five attempts, and have a one-minute resend cooldown. Mutations enforce origin checks; admin endpoints enforce role and verification server-side. Booking creation and changes use SQLite transactions.
 
 This initial scope includes **verification email only**. Appointment updates are displayed in My visits; automated appointment emails, password recovery, multiple stylists, date-specific shift overrides, and payments can be added later. Replace starter branding, imagery, and service content with the salon’s real details before launch.
@@ -106,7 +113,7 @@ Main actions and time slots have 52px or larger targets. Form text remains at le
 
 ## Page URLs and navigation
 
-Pages use `/book`, `/services`, `/studio`, `/appointments`, and `/admin`. Admin sections also have direct links: `/admin/working-hours`, `/admin/time-off`, `/admin/services`, `/admin/booking-rules`, and `/admin/team`. Each path supports direct loads and browser refresh. Old `/#book` style links are converted in the browser.
+Pages use `/book`, `/services`, `/studio`, `/appointments`, and `/admin`. Admin sections also have direct links: `/admin/working-hours`, `/admin/time-off`, `/admin/services`, `/admin/booking-rules`, `/admin/notifications`, and `/admin/team`. Each path supports direct loads and browser refresh. Old `/#book` style links are converted in the browser.
 
 Normal internal links use browser history without reloading the document. Back/Forward and opening links in another tab work normally. Booking selections update the relevant controls and summary while retaining the page shell, header, photos and unsaved details. The server uses an explicit page allowlist; unknown pages, assets, and API routes remain 404 responses.
 
@@ -118,6 +125,7 @@ lib/store.mjs          SQLite schema and starter data
 lib/auth.mjs           Passwords, sessions, registration, email verification
 lib/booking.mjs        Availability, bookings, repeat rules, settings validation
 lib/admin.mjs          Administrator access, vacations, service management
+lib/notifications.mjs  Notification preferences, inbox, durable email queue and worker
 lib/roles.mjs          Reserved owner identity and role checks
 public/index.html     Website shell
 public/routes.js      Shared page allowlist and clean URL mappings

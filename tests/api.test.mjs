@@ -191,3 +191,79 @@ test('clean page URLs load directly while unknown pages and API authorization st
   for (const path of ['/not-a-page', '/missing.js', '/admin/missing', '/api/missing']) assert.equal((await fetch(url + path)).status, 404, path);
   assert.equal((await request('/api/admin/dashboard')).status, 401);
 });
+
+test('manual booking endpoints require verified staff and show guest and account reservations in the right calendars', async t => {
+  const {db,request,signUp}=await fixture(t);
+  const guest={name:'Phone Client',phone:'+38112345678',serviceId:'mens-cut',notes:'Booked by phone'};
+  assert.equal((await request('/api/admin/clients')).status,401);
+  assert.equal((await request('/api/admin/bookings','POST',guest)).status,401);
+  const signup=await signUp();
+  assert.equal((await request('/api/admin/clients')).status,403);
+  assert.equal((await request('/api/admin/bookings','POST',guest)).status,403);
+  db.prepare("UPDATE users SET role='admin' WHERE id=?").run(signup.body.user.id);
+  assert.equal((await request('/api/admin/bookings','POST',guest)).status,403);
+  await request('/api/auth/verify','POST',{code:signup.body.devCode});
+  const clients=await request('/api/admin/clients');
+  assert.equal(clients.status,200);
+  assert.deepEqual(Object.keys(clients.body.clients[0]).sort(),['email','id','name','phone']);
+  const date=addDays((await request('/api/bootstrap')).body.today,1);
+  const slots=(await request(`/api/availability?service=mens-cut&date=${date}`)).body.slots;
+  const input={...guest,date,time:slots[0].time,expectedPrice:slots[0].price};
+  const created=await request('/api/admin/bookings','POST',input);
+  assert.equal(created.status,201); assert.equal(created.body.booking.status,'confirmed');
+  assert.equal((await request('/api/admin/bookings','POST',input)).status,409);
+  const row=(await request('/api/admin/dashboard')).body.bookings[0];
+  assert.equal(row.name,guest.name); assert.equal(row.phone,guest.phone); assert.equal(row.email,'');
+  assert.equal((await request('/api/bookings')).body.bookings.length,0);
+  const account=await request('/api/admin/bookings','POST',{...input,userId:signup.body.user.id,time:slots[1].time,expectedPrice:slots[1].price});
+  assert.equal(account.status,201);
+  assert.equal((await request('/api/bookings')).body.bookings[0].id,account.body.booking.id);
+  assert.equal((await request('/api/admin/dashboard')).body.bookings.length,2);
+  const cancelled=await request(`/api/bookings/${created.body.booking.id}/action`,'POST',{action:'cancel'});
+  assert.equal(cancelled.body.booking.status,'cancelled');
+  assert.equal((await request(`/api/availability?service=mens-cut&date=${date}`)).body.slots[0].available,true);
+});
+
+test('only the super admin can configure booking email recipients while every admin has a private inbox', async t => {
+  const {db,request,url}=await fixture(t);
+  const {createSession}=await import('../lib/auth.mjs');
+  db.exec(`INSERT INTO users (id,email,name,password,verified,role,created_at) VALUES
+    ('owner','mendmania@gmail.com','Owner','unused',1,'client',0),
+    ('staff','staff@example.test','Barber','unused',1,'admin',0),
+    ('customer','customer@example.test','Customer','unused',1,'client',0),
+    ('unverified','unverified@example.test','Unverified','unused',0,'admin',0)`);
+  const call=(id,path,method='GET',data)=>request(path,method,data,{Cookie:`erd_session=${createSession(db,id)}`});
+  assert.equal((await request('/api/admin/notifications')).status,401);
+  for(const id of ['customer','unverified']) {
+    assert.equal((await call(id,'/api/admin/notifications')).status,403);
+    assert.equal((await call(id,'/api/admin/notifications/read','POST',{throughId:1})).status,403);
+  }
+  for(const id of ['staff','customer','unverified']) {
+    assert.equal((await call(id,'/api/admin/notification-settings')).status,403);
+    assert.equal((await call(id,'/api/admin/notification-settings','PUT',{recipientIds:[id],language:'en'})).status,403);
+    assert.equal((await call(id,'/api/admin/notification-settings/retry','POST',{})).status,403);
+  }
+  const prefs=await call('owner','/api/admin/notification-settings','PUT',{recipientIds:['owner','staff'],language:'sq'});
+  assert.equal(prefs.status,200);assert.equal(prefs.body.recipients.length,2);assert.equal(prefs.body.emailConfigured,false);
+  assert.equal((await call('owner','/api/admin/notification-settings','PUT',{recipientIds:['customer'],language:'en'})).status,400);
+  // The general settings endpoint must not provide a route around owner-only recipient controls.
+  const bootstrap=(await request('/api/bootstrap')).body;
+  assert.equal(bootstrap.settings.notificationRecipients,undefined);
+  assert.equal((await call('staff','/api/admin/settings','PUT',{...bootstrap.settings,recipientIds:['customer'],notificationRecipients:['customer']})).status,200);
+  assert.equal((await call('owner','/api/admin/notification-settings')).body.language,'sq');
+  const date=addDays(bootstrap.today,1);
+  const slot=(await request(`/api/availability?service=mens-cut&date=${date}`)).body.slots[0];
+  const manual=await call('staff','/api/admin/bookings','POST',{name:'Guest',phone:'+38112345678',serviceId:'mens-cut',date,time:slot.time,expectedPrice:slot.price,notes:''});
+  assert.equal(manual.status,201);
+  const ownerInbox=(await call('owner','/api/admin/notifications')).body;
+  assert.equal(ownerInbox.unreadCount,1);assert.equal(ownerInbox.items[0].booking_id,manual.body.booking.id);
+  assert.equal((await call('staff','/api/admin/notifications')).body.unreadCount,0);
+  assert.equal((await call('staff','/api/admin/notifications/read','POST',{id:ownerInbox.items[0].id})).status,200);
+  assert.equal((await call('owner','/api/admin/notifications')).body.unreadCount,1);
+  assert.equal((await call('owner','/api/admin/notifications/read','POST',{id:ownerInbox.items[0].id})).body.unreadCount,0);
+  const pending=(await call('owner','/api/admin/notification-settings')).body.pending;
+  assert.equal(pending,1);
+  await call('owner','/api/admin/notification-settings','PUT',{recipientIds:[],language:'en'});
+  assert.equal((await call('owner','/api/admin/notification-settings')).body.pending,0);
+  assert.equal((await fetch(url+'/admin/notifications')).status,200);
+});

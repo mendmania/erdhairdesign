@@ -2532,3 +2532,24 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { animation: none!important; transition: none!important; scroll-behavior: auto!important; }
 }
+
+.reserve-guest { border: 0; padding: 0; margin: 0; min-width: 0; }
+[hidden] { display: none !important; }
+
+.notification-count { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; margin-left: 6px; border-radius: 20px; background: var(--ink); color: white; font: 600 12px var(--sans); vertical-align: middle; }
+.notification-recipients { border: 0; padding: 0; margin: 24px 0; min-width: 0; }
+.notification-recipients legend { font-weight: 600; margin-bottom: 12px; }
+.notification-recipient { display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border); padding: 14px 0; }
+.notification-recipient input { width: 22px; height: 22px; flex-shrink: 0; }
+.notification-recipient strong, .notification-recipient small { display: block; overflow-wrap: anywhere; }
+.notification-recipient small { color: var(--muted); margin-top: 4px; }
+.notification-feed { margin-top: 30px; }
+.notification-feed h2 { font-size: 24px; }
+.notification-feed .admin-section-heading p { font-size: 14px; color: var(--muted); margin: 8px 0; }
+.notification-list { display: grid; gap: 14px; }
+.notification-item { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: white; }
+.notification-item.unread { border-left: 4px solid var(--gold-dark); }
+.notification-item h3 { margin: 8px 0; }
+.notification-item p { margin: 6px 0; overflow-wrap: anywhere; }
+.notification-item .button { flex-shrink: 0; }
+@media (max-width: 600px) { .notification-item { flex-direction: column; align-items: stretch; padding: 18px; gap: 12px; } }

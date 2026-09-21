@@ -1,6 +1,6 @@
-import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260914-routes';
-import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260914-routes';
-import { selectAppointments } from './admin-view.js?v=20260914-routes';
+import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260921-notifications';
+import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260921-notifications';
+import { selectAppointments } from './admin-view.js?v=20260921-notifications';
 try { setLanguage(localStorage.getItem('erd-language') || (navigator.language.startsWith('sq') ? 'sq' : 'en')); } catch {}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,7 +22,7 @@ const shapes = {
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
 };
 const icon = (name, cls = '') => h`<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes[name] || shapes.sparkles}</svg>`;
-const state = { services: [], settings: {}, user: null, step: 0, serviceId: null, category: 'All services', date: null, slot: null, slots: [], repeatWeeks: 0, notes: '', route: 'book', adminTab: 'appointments', adminFilter: 'today', adminQuery: '', adminDate: '', bookings: [], devCode: null };
+const state = { services: [], settings: {}, user: null, step: 0, serviceId: null, category: 'All services', date: null, slot: null, slots: [], repeatWeeks: 0, notes: '', route: 'book', adminTab: 'appointments', adminFilter: 'today', adminQuery: '', adminDate: '', bookings: [], notifications: {items:[],unreadCount:0}, devCode: null };
 const money = cents => new Intl.NumberFormat(locale(), { style: 'currency', currency: state.settings.currency || 'EUR', maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
 const isStaff = () => state.user?.verified && ['admin', 'super_admin'].includes(state.user.role);
 const isOwner = () => isStaff() && state.user.role === 'super_admin';
@@ -50,7 +50,7 @@ function updateNav() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.dataset.i18nSource ||= el.innerHTML; const copy = h(el.dataset.i18nSource); if (el.innerHTML !== copy) el.innerHTML = copy; });
   document.querySelectorAll('[data-i18n-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
   document.querySelectorAll('[data-nav]').forEach(a => { const current = a.dataset.nav === state.route; a.classList.toggle('active', current); current ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
-  const account = languageControl() + (state.user ? h`${isStaff() ? h('<a class="account-link workspace-link" href="/admin">Workspace</a>') : ''}<a class="account-link" href="/appointments">${icon('calendar')}<span>My visits</span></a><button class="avatar" data-action="account" aria-label="Your account">${esc(state.user.name.slice(0, 1))}</button>` : h`<button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button>`);
+  const account = languageControl() + (state.user ? h`${isStaff() ? h`<a class="account-link workspace-link" href="/admin">Workspace ${notificationCount()}</a>` : ''}<a class="account-link" href="/appointments">${icon('calendar')}<span>My visits</span></a><button class="avatar" data-action="account" aria-label="Your account">${esc(state.user.name.slice(0, 1))}</button>` : h`<button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button>`);
   if (account !== accountMarkup) { $('#account-nav').innerHTML = account; accountMarkup = account; }
 }
 function languageControl() { return `<label class="language-control"><span class="sr-only">${t('Language')}</span><select id="language-select" aria-label="${t('Language')}"><option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option><option value="sq" ${getLanguage() === 'sq' ? 'selected' : ''}>Shqip</option></select></label>`; }
@@ -184,15 +184,15 @@ function adminPage() {
   const counts = Object.fromEntries(['today', 'pending', 'complete', 'upcoming'].map(view => [view, selectAppointments(data.bookings, {view, today}).length]));
   return h`<section class="content-page admin-page page-enter"><header class="workspace-heading"><div><p class="eyebrow">SALON OPERATIONS</p><h1>Salon workspace</h1><p>${dateLabel(today, {year:'numeric'})} <span aria-hidden="true">·</span> ${vacation ? h`Time off: ${esc(vacation.label)}` : shift.open ? h`Open ${shift.start}–${shift.end}` : h('No regular shift today')}</p></div><div class="workspace-heading-actions"><span class="owner-badge">${isOwner() ? h('Super admin') : h('Administrator')}</span><button class="button button-outline button-small" data-action="refresh-admin">${icon('repeat')} Refresh</button></div></header>
     <div class="operations-stats">${[['today',h("Today's visits"),h('Your daily schedule')],['pending',h('Awaiting approval'),h('Review client requests')],['complete',h('Ready to complete'),h('Finish visits & renew repeats')],['upcoming',h('Upcoming'),h('All future active visits')]].map(([view,label,hint]) => h`<button class="operation-stat ${state.adminTab === 'appointments' && state.adminFilter === view ? 'selected' : ''}" data-action="admin-view" data-view="${view}"><span>${label}</span><strong>${counts[view]}</strong><small>${hint} ↗</small></button>`).join('')}</div>
-    <nav class="admin-tabs" aria-label="Salon workspace sections">${['appointments', 'hours', 'vacations', 'prices', 'rules', ...(isOwner() ? ['team'] : [])].map(t => h`<button data-action="admin-tab" data-tab="${t}" aria-current="${state.adminTab === t ? 'page' : 'false'}" class="${state.adminTab === t ? 'selected' : ''}">${({ appointments: h('Appointments'), hours: h('Working hours'), vacations: h('Time off'), team: h('Administrators'), prices: h('Services & prices'), rules: h('Booking rules') })[t]}</button>`).join('')}</nav>
-    ${state.adminTab === 'appointments' ? adminAppointmentBook() : state.adminTab === 'hours' ? hoursForm() : state.adminTab === 'vacations' ? vacationsForm() : state.adminTab === 'prices' ? pricesForm() : state.adminTab === 'team' && isOwner() ? teamForm() : rulesForm()}
+    <nav class="admin-tabs" aria-label="Salon workspace sections">${['appointments', 'hours', 'vacations', 'prices', 'rules', 'notifications', ...(isOwner() ? ['team'] : [])].map(t => h`<button data-action="admin-tab" data-tab="${t}" aria-current="${state.adminTab === t ? 'page' : 'false'}" class="${state.adminTab === t ? 'selected' : ''}">${({ appointments: h('Appointments'), hours: h('Working hours'), vacations: h('Time off'), team: h('Administrators'), prices: h('Services & prices'), rules: h('Booking rules'), notifications: h('Notifications') })[t]}${t === 'notifications' ? notificationCount() : ''}</button>`).join('')}</nav>
+    ${state.adminTab === 'appointments' ? adminAppointmentBook() : state.adminTab === 'notifications' ? notificationsPage() : state.adminTab === 'hours' ? hoursForm() : state.adminTab === 'vacations' ? vacationsForm() : state.adminTab === 'prices' ? pricesForm() : state.adminTab === 'team' && isOwner() ? teamForm() : rulesForm()}
     </section>`;
 }
 function adminAppointmentBook() {
-  return h`<section class="operations-book" aria-label="Appointment book"><div class="operations-filters" role="group" aria-label="Appointment views">${Object.entries(adminViews).map(([view,label]) => h`<button data-action="admin-view" data-view="${view}" aria-pressed="${state.adminFilter === view}" class="${state.adminFilter === view ? 'selected' : ''}">${t(label)}</button>`).join('')}</div><div class="operations-search"><label>Find a client or service<input id="admin-search" type="search" placeholder="Name, email, phone or service" value="${esc(state.adminQuery)}" autocomplete="off"/></label><label>On a specific date<input id="admin-date" type="date" value="${state.adminDate}"/></label><button class="text-button" data-action="admin-clear">Clear filters</button></div><div id="admin-results">${adminResults()}</div></section>`;
+  return h`<section class="operations-book" aria-label="Appointment book"><div class="admin-section-heading"><h2>Appointments</h2><button class="button button-primary" data-action="admin-reserve">Reserve for client +</button></div><div class="operations-filters" role="group" aria-label="Appointment views">${Object.entries(adminViews).map(([view,label]) => h`<button data-action="admin-view" data-view="${view}" aria-pressed="${state.adminFilter === view}" class="${state.adminFilter === view ? 'selected' : ''}">${t(label)}</button>`).join('')}</div><div class="operations-search"><label>Find a client or service<input id="admin-search" type="search" placeholder="Name, email, phone or service" value="${esc(state.adminQuery)}" autocomplete="off"/></label><label>On a specific date<input id="admin-date" type="date" value="${state.adminDate}"/></label><button class="text-button" data-action="admin-clear">Clear filters</button></div><div id="admin-results">${adminResults()}</div></section>`;
 }
 function adminResults() {
-  const bookings = selectAppointments(state.admin.bookings, {view:state.adminFilter, today:state.today, query:state.adminQuery, date:state.adminDate});
+  const bookings = selectAppointments(state.admin.bookings.filter(b => !state.adminBookingId || b.id === state.adminBookingId), {view:state.adminFilter, today:state.today, query:state.adminQuery, date:state.adminDate});
   let date = '';
   return h`<p class="result-count" role="status">${bookings.length} ${bookings.length === 1 ? t('appointment') : t('appointments')} · ${t(adminViews[state.adminFilter])}</p>${bookings.length ? h`<div class="appointment-list">${bookings.map(b => { const heading = b.date !== date ? h`<h3 class="agenda-day">${b.date === state.today ? h('Today · ') : ''}${dateLabel(b.date, {year:'numeric'})}</h3>` : ''; date = b.date; return heading + adminAppointmentCard(b); }).join('')}</div>` : h`<div class="empty-state operations-empty">${icon('calendar')}<h3>${state.adminQuery || state.adminDate ? h('No matching appointments') : state.adminFilter === 'pending' ? h('All requests reviewed') : state.adminFilter === 'complete' ? h('Nothing waiting to be completed') : state.adminFilter === 'today' ? h('Your day is clear') : h('No appointments here')}</h3><p>${state.adminQuery || state.adminDate ? h('Try another search or clear the filters.') : h('Use the views above to check other appointments.')}</p><button class="button button-outline button-small" data-action="admin-view" data-view="all">View all appointments</button></div>`}`;
 }
@@ -201,7 +201,83 @@ function adminAppointmentCard(b) {
   const ready = b.status === 'confirmed' && b.ends_at <= Date.now();
   const active = ['pending','confirmed'].includes(b.status);
   const phone = String(b.phone || '').replace(/[^+0-9]/g, '');
-  return h`<article class="operation-appointment"><div class="agenda-time"><strong>${b.time}</strong><span>${duration(b.duration)}</span></div><div class="agenda-detail"><div class="appointment-title"><h3>${esc(b.name)}</h3><span class="badge badge-${b.status}">${expired ? h('Expired request') : ready ? h('Ready to complete') : ({pending:h('Needs approval'),confirmed:h('Confirmed'),completed:h('Completed'),cancelled:h('Cancelled'),declined:h('Declined')})[b.status]}</span></div><p class="agenda-service">${esc(bookingName(b))} <strong>${money(b.price)}</strong>${b.outside ? h(' · Outside hours') : ''}</p><div class="agenda-contact">${phone ? h`<a href="tel:${esc(phone)}">${esc(b.phone)}</a>` : ''}<a href="mailto:${esc(b.email)}">${esc(b.email)}</a></div>${b.notes ? h`<p class="agenda-note"><strong>Client note:</strong> ${esc(b.notes)}</p>` : ''}${b.repeat_weeks ? h`<p class="repeat-caption">${icon('repeat')} Every ${b.repeat_weeks} week${b.repeat_weeks === 1 ? '' : 's'}</p>` : ''}${b.recurrence_note ? h`<p class="recurrence-note">${esc(t(b.recurrence_note))}</p>` : ''}${expired ? h('<p class="agenda-warning">This time has passed. Decline the request so the client can book again.</p>') : ''}${b.status === 'pending' && !expired ? h`<p class="fine-print">${b.approvals} manual approvals so far</p>` : ''}</div><div class="agenda-actions">${b.status === 'pending' ? h`${!expired ? h`<button class="button button-primary button-small" data-action="booking-action" data-id="${b.id}" data-value="approve">Approve ${icon('check')}</button>` : ''}<button class="text-button danger" data-action="admin-decline-open" data-id="${b.id}">Decline request</button>` : ready ? h`<button class="button button-primary button-small" data-action="${b.repeat_weeks ? 'admin-complete-open' : 'booking-action'}" data-id="${b.id}" data-value="complete">Complete visit ${icon('check')}</button>` : b.status === 'confirmed' ? h('<span class="fine-print">Complete after the visit ends</span>') : ''}${active ? h`<button class="text-button subtle" data-action="admin-cancel-open" data-id="${b.id}">Cancel visit</button>` : ''}</div></article>`;
+  return h`<article class="operation-appointment"><div class="agenda-time"><strong>${b.time}</strong><span>${duration(b.duration)}</span></div><div class="agenda-detail"><div class="appointment-title"><h3>${esc(b.name)}</h3><span class="badge badge-${b.status}">${expired ? h('Expired request') : ready ? h('Ready to complete') : ({pending:h('Needs approval'),confirmed:h('Confirmed'),completed:h('Completed'),cancelled:h('Cancelled'),declined:h('Declined')})[b.status]}</span></div><p class="agenda-service">${esc(bookingName(b))} <strong>${money(b.price)}</strong>${b.outside ? h(' · Outside hours') : ''}</p><div class="agenda-contact">${phone ? h`<a href="tel:${esc(phone)}">${esc(b.phone)}</a>` : ''}${b.email ? h`<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>` : ''}</div>${b.created_by ? h('<p class="fine-print">Booked by the salon</p>') : ''}${b.notes ? h`<p class="agenda-note"><strong>Client note:</strong> ${esc(b.notes)}</p>` : ''}${b.repeat_weeks ? h`<p class="repeat-caption">${icon('repeat')} Every ${b.repeat_weeks} week${b.repeat_weeks === 1 ? '' : 's'}</p>` : ''}${b.recurrence_note ? h`<p class="recurrence-note">${esc(t(b.recurrence_note))}</p>` : ''}${expired ? h('<p class="agenda-warning">This time has passed. Decline the request so the client can book again.</p>') : ''}${b.status === 'pending' && !expired ? h`<p class="fine-print">${b.approvals} manual approvals so far</p>` : ''}</div><div class="agenda-actions">${b.status === 'pending' ? h`${!expired ? h`<button class="button button-primary button-small" data-action="booking-action" data-id="${b.id}" data-value="approve">Approve ${icon('check')}</button>` : ''}<button class="text-button danger" data-action="admin-decline-open" data-id="${b.id}">Decline request</button>` : ready ? h`<button class="button button-primary button-small" data-action="${b.repeat_weeks ? 'admin-complete-open' : 'booking-action'}" data-id="${b.id}" data-value="complete">Complete visit ${icon('check')}</button>` : b.status === 'confirmed' ? h('<span class="fine-print">Complete after the visit ends</span>') : ''}${active ? h`<button class="text-button subtle" data-action="admin-cancel-open" data-id="${b.id}">Cancel visit</button>` : ''}</div></article>`;
+}
+async function adminReserveModal() {
+  const { clients } = await api('/admin/clients');
+  openModal(h`<h2 id="modal-title">Reserve for client</h2><p class="modal-description">Book a request received by phone or message. The appointment is confirmed immediately.</p>
+    <form id="admin-reserve-form">
+      <label>Client<select name="userId" id="reserve-client"><option value="">Guest (no account)</option>${clients.map(u => h`<option value="${esc(u.id)}">${esc(u.name)} · ${esc(u.phone)} · ${esc(u.email)}</option>`).join('')}</select></label>
+      <fieldset id="reserve-guest" class="reserve-guest"><div class="field-grid"><label>Full name<input name="name" minlength="2" maxlength="100" autocomplete="off" required/></label><label>Phone number<input name="phone" type="tel" maxlength="30" autocomplete="off" required/></label></div></fieldset>
+      <label>Service<select name="serviceId" id="reserve-service" required>${state.services.map(s => h`<option value="${esc(s.id)}">${esc(serviceName(s))} · ${duration(s.duration)}</option>`).join('')}</select></label>
+      <div class="field-grid"><label>Date<input name="date" id="reserve-date" type="date" value="${state.today}" min="${state.today}" max="${dayAfter(state.today, 90)}" required/></label><label>Time<select name="time" id="reserve-time" required disabled><option value="">Choose a time</option></select></label></div>
+      <p class="fine-print" id="reserve-status" role="status"></p><button class="text-button" type="button" data-action="reserve-retry" hidden>Try again</button>
+      <p class="fine-print">All appointment times are in ${esc(state.settings.timezone)}.</p>
+      <label>Notes (optional)<textarea name="notes" maxlength="1000" rows="2"></textarea></label>
+      <p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" type="submit" disabled>Confirm reservation</button>
+    </form>`);
+  await loadReserveSlots();
+}
+async function loadReserveSlots(form = $('#admin-reserve-form')) {
+  if (!form?.isConnected) return;
+  const request = (form.slotRequest || 0) + 1; form.slotRequest = request;
+  const time = $('#reserve-time'), status = $('#reserve-status'), submit = $('button[type="submit"]', form), retry = $('[data-action="reserve-retry"]', form);
+  form.slots = []; time.disabled = true; submit.disabled = true; retry.hidden = true;
+  time.innerHTML = h('<option value="">Choose a time</option>'); status.textContent = t('Loading available times…');
+  try {
+    const result = await api(`/availability?service=${encodeURIComponent(form.elements.serviceId.value)}&date=${encodeURIComponent(form.elements.date.value)}`);
+    if (!form.isConnected || request !== form.slotRequest) return;
+    form.slots = result.slots.filter(s => s.available);
+    time.innerHTML += form.slots.map(s => h`<option value="${s.time}">${s.time} · ${money(s.price)}${s.outside ? h(' · Outside hours') : ''}</option>`).join('');
+    time.disabled = !form.slots.length;
+    status.textContent = t(result.closed ? 'The salon is taking time off on this date. Please choose another day.' : form.slots.length ? 'Choose a time to review the price and confirm.' : 'No available times. Choose another date or service.');
+  } catch (error) {
+    if (!form.isConnected || request !== form.slotRequest) return;
+    status.textContent = error.message; retry.hidden = false;
+  }
+}
+function notificationCount() {
+  return h`<span class="notification-count" ${state.notifications.unreadCount ? '' : 'hidden'} aria-label="${esc(t('Unread notifications'))}: ${state.notifications.unreadCount}">${state.notifications.unreadCount}</span>`;
+}
+function notificationsPage() {
+  const prefs = state.admin.notificationSettings;
+  return h`<section class="notifications-page">
+    ${isOwner() && prefs ? h`<form id="notification-settings-form" class="admin-form"><h2>Email notifications</h2>
+      <p>Only the super admin can choose who receives emails for new reservations and cancellations.</p>
+      <p>Select verified administrators below. The person making the change will not receive their own alert. Changes apply to future notifications; deselecting someone also stops their unsent emails.</p>
+      ${!prefs.emailConfigured ? h('<p class="info-box">Email delivery is not configured. Notifications stay in the panel and selected emails wait until delivery is configured.</p>') : ''}
+      <fieldset class="notification-recipients"><legend>Email recipients</legend>${prefs.recipients.map(u => h`<label class="notification-recipient"><input type="checkbox" id="notification-recipient-${esc(u.id)}" name="recipientIds" value="${esc(u.id)}" ${u.selected ? 'checked' : ''}/><span><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></span></label>`).join('')}</fieldset>
+      <p class="fine-print">Leave everyone unselected to turn off booking emails. Add administrators in the Administrators section.</p>
+      <label>Email language<select name="language"><option value="en" ${prefs.language === 'en' ? 'selected' : ''}>English</option><option value="sq" ${prefs.language === 'sq' ? 'selected' : ''}>Shqip</option></select></label>
+      <div id="notification-delivery-status">${notificationDeliveryStatus(prefs)}</div>
+      <p class="form-error" id="form-error" role="alert"></p><button type="submit" class="button button-primary">Save email recipients</button>
+    </form>` : ''}
+    <div class="notification-feed">${notificationFeed()}</div>
+  </section>`;
+}
+function notificationDeliveryStatus(prefs) {
+  return h`<p class="fine-print">Queued emails: ${prefs.pending}. Failed emails: ${prefs.failed}.</p>${prefs.failed ? h('<button type="button" class="text-button" data-action="notification-retry">Retry failed emails</button>') : ''}`;
+}
+function notificationFeed() {
+  const {items,unreadCount} = state.notifications;
+  return h`<div class="admin-section-heading"><div><h2>Your notifications ${notificationCount()}</h2><p>New reservations and cancellations. Showing the latest 50.</p></div><button class="button button-outline button-small" data-action="notifications-read" ${!unreadCount ? 'disabled' : ''}>Mark all as read</button></div>
+    <div class="notification-list">${items.map(n => h`<article class="notification-item ${n.read_at ? '' : 'unread'}"><div><p class="eyebrow">${n.kind === 'cancelled' ? h('Reservation cancelled') : h('New reservation')}${!n.read_at ? h(' · Unread') : ''}</p><h3>${esc(n.name)}</h3><p>${esc(getLanguage() === 'sq' && n.serviceSq ? n.serviceSq : n.service)} · ${dateLabel(n.date)} · ${n.time}</p><p class="fine-print">${n.kind === 'cancelled' ? h('Cancelled') : n.status === 'pending' ? h('Needs approval') : h('Confirmed')}</p></div><button class="button button-outline button-small" data-action="notification-open" data-id="${n.id}" data-booking="${n.booking_id}">View reservation</button></article>`).join('') || h('<p class="empty-state">No notifications yet.</p>')}</div>`;
+}
+function updateNotificationDisplay() {
+  updateNav();
+  document.querySelectorAll('.notification-count').forEach(el => { el.textContent = state.notifications.unreadCount; el.hidden = !state.notifications.unreadCount; el.setAttribute('aria-label', t('Unread notifications') + ': ' + state.notifications.unreadCount); });
+  const feed = $('.notification-feed'); if (feed) feed.innerHTML = notificationFeed();
+}
+async function refreshNotifications() {
+  if (!isStaff() || document.hidden) return;
+  const userId = state.user.id;
+  try {
+    const notifications = await api('/admin/notifications');
+    if (!isStaff() || state.user.id !== userId) return;
+    if (JSON.stringify(notifications) === JSON.stringify(state.notifications)) return;
+    state.notifications = notifications;
+    updateNotificationDisplay();
+  } catch { /* Keep the last successful inbox during temporary network failures. */ }
 }
 function hoursForm() {
   const s = state.admin.settings;
@@ -220,7 +296,7 @@ function vacationsForm() {
 function teamForm() {
   return h`<div class="admin-form"><h2>The people behind the salon</h2><p>Your super-admin account is protected. Only you can give or remove administrator access. Administrators manage appointments, the shared salon shifts, time off, services, and booking rules.</p><form id="team-form"><label>Registered email address<input name="email" type="email" maxlength="254" placeholder="name@example.com" required/></label><p class="fine-print">This person must register and verify their email first. After an access change, they need to sign in again.</p><p class="form-error" id="form-error" role="alert"></p><button class="button button-primary" type="submit">Make administrator ${icon('shield')}</button></form><div class="admin-items">${state.admin.admins.map(u => h`<article class="admin-item"><div><h3>${esc(u.name)}</h3><p>${esc(u.email)}</p></div>${u.role === 'super_admin' ? h('<span class="owner-badge">Super admin · Protected</span>') : h`<button class="text-button" data-action="admin-remove-open" data-email="${esc(u.email)}">Remove admin access</button>`}</article>`).join('')}</div></div>`;
 }
-function rulesForm() { const s = state.admin.settings; return h`<form id="rules-form" class="admin-form"><h2>Booking, your way.</h2><p>A few simple rules keep your appointment book feeling manageable.</p><label class="rule-setting"><div><strong>Automatically approve returning clients</strong><p>After the required number of manual approvals, future appointments are confirmed instantly. Turn this off to review every request.</p></div><input type="checkbox" name="autoApprove" ${s.autoApprove ? 'checked' : ''}/></label><label class="rule-setting"><div><strong>Manual approvals before automatic booking</strong><p>Default: 2 approvals per client. Set to 0 to auto-approve from the first visit.</p></div><input type="number" name="requiredApprovals" min="0" max="20" value="${s.requiredApprovals}" required/></label><label class="rule-setting"><div><strong>Always review outside-hours requests</strong><p>Even regular clients need your approval for visits outside your working shifts.</p></div><input type="checkbox" name="outsideApproval" ${s.outsideApproval ? 'checked' : ''}/></label><div class="info-box">${icon('shield')}<div><strong>A simple foundation.</strong><p>Every client needs a verified email and can have one active visit. Repeats create the next visit after completion and follow these same rules. Changes apply to new requests.</p></div></div><p class="form-error" id="form-error" role="alert"></p><button class="button button-primary">Save booking rules ${icon('check')}</button></form>`; }
+function rulesForm() { const s = state.admin.settings; return h`<form id="rules-form" class="admin-form"><h2>Booking, your way.</h2><p>A few simple rules keep your appointment book feeling manageable.</p><label class="rule-setting"><div><strong>Automatically approve returning clients</strong><p>After the required number of manual approvals, future appointments are confirmed instantly. Turn this off to review every request.</p></div><input type="checkbox" name="autoApprove" ${s.autoApprove ? 'checked' : ''}/></label><label class="rule-setting"><div><strong>Manual approvals before automatic booking</strong><p>Default: 2 approvals per client. Set to 0 to auto-approve from the first visit.</p></div><input type="number" name="requiredApprovals" min="0" max="20" value="${s.requiredApprovals}" required/></label><label class="rule-setting"><div><strong>Always review outside-hours requests</strong><p>Even regular clients need your approval for visits outside your working shifts.</p></div><input type="checkbox" name="outsideApproval" ${s.outsideApproval ? 'checked' : ''}/></label><div class="info-box">${icon('shield')}<div><strong>A simple foundation.</strong><p>Online booking requires a verified email and allows one active visit per account. Admins can also confirm bookings for clients by phone or message. Repeats create the next visit after completion and follow these same rules. Changes apply to new requests.</p></div></div><p class="form-error" id="form-error" role="alert"></p><button class="button button-primary">Save booking rules ${icon('check')}</button></form>`; }
 
 function openModal(content) {
   const dialog = $('#modal');
@@ -256,14 +332,21 @@ async function loadSlots() {
 async function route() {
   const request = ++routeRequest;
   const page = pages[pagePath(location.pathname)] || pages['/'];
-  let session, admin, bookings;
+  let session, admin, bookings, notifications;
   if (page.name === 'appointments' && state.user) bookings = (await api('/bookings')).bookings;
   if (page.name === 'admin') {
     session = await api('/bootstrap');
-    if (session.user?.verified && ['admin', 'super_admin'].includes(session.user.role)) admin = await api('/admin/dashboard');
+    if (session.user?.verified && ['admin', 'super_admin'].includes(session.user.role)) {
+      admin = await api('/admin/dashboard');
+      notifications = await api('/admin/notifications');
+      if (page.adminTab === 'notifications' && session.user.role === 'super_admin') admin.notificationSettings = await api('/admin/notification-settings');
+    }
   }
   if (request !== routeRequest) return false;
   state.route = page.name;
+  state.adminBookingId = page.adminTab === 'appointments' ? new URLSearchParams(location.search).get('booking') : null;
+  if (state.adminBookingId) { state.adminFilter = 'all'; state.adminQuery = ''; state.adminDate = ''; }
+  if (notifications) state.notifications = notifications;
   if (bookings) state.bookings = bookings;
   if (session) { state.user = session.user; state.today = session.today; state.admin = admin || null; }
   if (page.adminTab) state.adminTab = page.adminTab;
@@ -315,7 +398,7 @@ async function action(button) {
   if (a === 'verify-open') verifyModal();
   if (a === 'resend') { const result = await api('/auth/resend', 'POST', {}); state.devCode = result.devCode; verifyModal(); toast(state.devCode ? h('A new local verification code is ready.') : h('A new code is on its way.')); }
   if (a === 'account') openModal(h`<p class="eyebrow">YOUR LITTLE CORNER</p><h2 id="modal-title">Hello, ${esc(state.user.name.split(' ')[0])}.</h2><p class="modal-description">${esc(state.user.email)} · ${state.user.verified ? h('Verified') : h('Not yet verified')}</p><div class="account-menu"><a class="button button-outline" href="/appointments" data-action="modal-close">${icon('calendar')} My visits</a>${!state.user.verified ? h('<button class="button button-outline" data-action="verify-open">Verify email</button>') : ''}${isStaff() ? h('<a class="button button-outline" href="/admin" data-action="modal-close">Salon workspace ↗</a>') : ''}<button class="text-button" data-action="logout">Sign out</button></div>`);
-  if (a === 'logout') { await api('/auth/logout', 'POST', {}); state.user = null; state.detailsDraft = null; state.devCode = null; state.bookings = []; state.admin = null; if (state.step > 2) state.step = 2; closeModal(); await route(); toast(h('You’re signed out. See you soon.')); }
+  if (a === 'logout') { await api('/auth/logout', 'POST', {}); state.user = null; state.detailsDraft = null; state.devCode = null; state.bookings = []; state.admin = null; state.notifications = {items:[],unreadCount:0}; if (state.step > 2) state.step = 2; closeModal(); await route(); toast(h('You’re signed out. See you soon.')); }
   if (a === 'admin-entry') { if (state.user) { await navigate('/admin'); } else { state.authIntent = 'admin'; authModal(); } }
   if (a === 'book') {
     const { booking } = await api('/bookings', 'POST', { serviceId: state.serviceId, date: state.date, time: state.slot.time, repeatWeeks: state.repeatWeeks, notes: state.notes, expectedPrice: state.slot.price });
@@ -325,6 +408,11 @@ async function action(button) {
   }
   if (a === 'cancel-open') openModal(h`<p class="eyebrow">A CHANGE OF PLANS</p><h2 id="modal-title">Cancel this visit?</h2><p class="modal-description">We’ll free up your time for someone else. Any repeat schedule for this visit will stop, too.</p><button class="button button-primary full-width" data-action="booking-action" data-value="cancel" data-id="${button.dataset.id}">Yes, cancel my visit</button><button class="text-button full-width cancel-keep" data-action="modal-close">Keep my appointment</button>`);
   if (a === 'booking-action') { await api(h`/bookings/${button.dataset.id}/action`, 'POST', { action: button.dataset.value }); if ($('#modal').open) closeModal(); await route(); toast(h('Appointment updated.')); }
+  if (a === 'notifications-read') { state.notifications = await api('/admin/notifications/read', 'POST', {throughId:state.notifications.items[0].id}); updateNotificationDisplay(); }
+  if (a === 'notification-open') { state.notifications = await api('/admin/notifications/read', 'POST', {id:Number(button.dataset.id)}); await navigate(`/admin?booking=${encodeURIComponent(button.dataset.booking)}`); }
+  if (a === 'notification-retry') { state.admin.notificationSettings = await api('/admin/notification-settings/retry', 'POST', {}); $('#notification-delivery-status').innerHTML = notificationDeliveryStatus(state.admin.notificationSettings); toast(h('Failed emails queued for retry.')); }
+  if (a === 'admin-reserve') await adminReserveModal();
+  if (a === 'reserve-retry') await loadReserveSlots();
   if (a === 'service-edit') serviceEditor(button.dataset.id);
   if (a === 'service-remove-open') openModal(h`<h2 id="modal-title">Remove this service?</h2><p class="modal-description">It will disappear from the booking menu. Existing appointments and history are kept. Future repeats for this service will pause.</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="service-remove" data-id="${button.dataset.id}">Remove service</button><button class="text-button full-width cancel-keep" data-action="modal-close">Keep service</button>`);
   if (a === 'service-remove') { await api(h`/admin/services/${button.dataset.id}`, 'DELETE', {}); closeModal(); await route(); toast(h('Service removed from the menu.')); }
@@ -332,13 +420,13 @@ async function action(button) {
   if (a === 'vacation-remove') { await api(h`/admin/vacations/${button.dataset.id}`, 'DELETE', {}); closeModal(); await route(); toast(h('Time off removed.')); }
   if (a === 'admin-remove-open') openModal(h`<h2 id="modal-title">Remove admin access?</h2><p class="modal-description">${esc(button.dataset.email)} will keep their client account and appointments. Their administrator access will end immediately.</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="admin-remove" data-email="${esc(button.dataset.email)}">Remove admin access</button><button class="text-button full-width cancel-keep" data-action="modal-close">Keep access</button>`);
   if (a === 'admin-remove') { await api('/admin/team', 'PUT', {email: button.dataset.email, role: 'client'}); closeModal(); await route(); toast(h('Administrator access removed.')); }
-  if (a === 'admin-view') { state.adminTab = 'appointments'; state.adminFilter = button.dataset.view; state.adminQuery = ''; state.adminDate = ''; if (location.pathname !== '/admin') await navigate('/admin'); else render(); }
-  if (a === 'admin-clear') { state.adminQuery = ''; state.adminDate = ''; render(); }
+  if (a === 'admin-view') { state.adminTab = 'appointments'; state.adminFilter = button.dataset.view; state.adminQuery = ''; state.adminDate = ''; state.adminBookingId = null; if (location.search || location.pathname !== '/admin') await navigate('/admin'); else render(); }
+  if (a === 'admin-clear') { state.adminQuery = ''; state.adminDate = ''; state.adminBookingId = null; history.replaceState(null, '', '/admin'); render(); }
   if (a === 'copy-weekdays') { const form = $('#hours-form'); for (let day = 2; day <= 5; day++) { form.elements[h`open-${day}`].checked = form.elements['open-1'].checked; form.elements[h`start-${day}`].value = form.elements['start-1'].value; form.elements[h`end-${day}`].value = form.elements['end-1'].value; } toast(h('Monday copied to Tuesday–Friday. Save working hours to apply.')); }
   if (['admin-decline-open','admin-cancel-open','admin-complete-open'].includes(a)) {
     const b = state.admin.bookings.find(b => b.id === button.dataset.id);
     const value = a === 'admin-decline-open' ? 'decline' : a === 'admin-cancel-open' ? 'cancel' : 'complete';
-    openModal(h`<h2 id="modal-title">${value === 'complete' ? h('Complete this repeat visit?') : value === 'decline' ? h('Decline this request?') : h('Cancel this visit?')}</h2><p class="modal-description"><strong>${esc(b.name)}</strong><br>${esc(bookingName(b))} · ${dateLabel(b.date)} at ${b.time}</p><p class="modal-description">${value === 'complete' ? h('This finishes the visit and requests the next repeat, subject to availability and booking rules.') : h('The time will be released and any repeat schedule will stop. The client can see the update in My visits.')}</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="booking-action" data-value="${value}" data-id="${b.id}">${value === 'complete' ? h('Complete & renew repeat') : value === 'decline' ? h('Decline request') : h('Cancel visit')}</button><button class="text-button full-width cancel-keep" data-action="modal-close">Go back</button>`);
+    openModal(h`<h2 id="modal-title">${value === 'complete' ? h('Complete this repeat visit?') : value === 'decline' ? h('Decline this request?') : h('Cancel this visit?')}</h2><p class="modal-description"><strong>${esc(b.name)}</strong><br>${esc(bookingName(b))} · ${dateLabel(b.date)} at ${b.time}</p><p class="modal-description">${value === 'complete' ? h('This finishes the visit and requests the next repeat, subject to availability and booking rules.') : b.user_id ? h('The time will be released and any repeat schedule will stop. The client can see the update in My visits.') : h('The time will be released. Let the client know about the cancellation.')}</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="booking-action" data-value="${value}" data-id="${b.id}">${value === 'complete' ? h('Complete & renew repeat') : value === 'decline' ? h('Decline request') : h('Cancel visit')}</button><button class="text-button full-width cancel-keep" data-action="modal-close">Go back</button>`);
   }
   if (a === 'admin-tab') await navigate(adminPath(button.dataset.tab));
   if (a === 'refresh-admin') { await route(); toast(h('Your appointment book is up to date.')); }
@@ -374,17 +462,21 @@ document.addEventListener('change', async event => {
       for (const field of fields) { const el = field.id ? document.getElementById(field.id) : document.querySelector(`#main [name="${CSS.escape(field.name)}"]`); if (el) { el.value = field.value; if ('checked' in el) el.checked = field.checked; } }
       $('#language-select').focus({preventScroll:true});
     }
+    if (event.target.id === 'reserve-client') { const guest = $('#reserve-guest'); guest.hidden = Boolean(event.target.value); guest.disabled = Boolean(event.target.value); }
+    if (['reserve-service', 'reserve-date'].includes(event.target.id)) await loadReserveSlots();
+    if (event.target.id === 'reserve-time') $('button[type="submit"]', event.target.form).disabled = !event.target.value;
     if (event.target.id === 'date-picker') { const date = event.target.value; if (date < state.today || date > dayAfter(state.today, 90)) throw new Error(h('Choose a date within the next 90 days.')); state.date = date; state.slot = null; await loadSlots(); render(); }
     if (event.target.id === 'repeat-weeks') { state.repeatWeeks = Number(event.target.value); render({selectionOnly:true}); $('#repeat-weeks').focus({preventScroll:true}); }
-    if (event.target.id === 'admin-date') { state.adminDate = event.target.value; $('#admin-results').innerHTML = adminResults(); }
+    if (event.target.id === 'admin-date') { state.adminBookingId = null; state.adminDate = event.target.value; $('#admin-results').innerHTML = adminResults(); }
   } catch (error) { toast(error.message); }
 });
 document.addEventListener('invalid', event => { const el = event.target; if (getLanguage() === 'sq' && el.setCustomValidity) el.setCustomValidity(t(el.validity.valueMissing ? 'Complete this field.' : el.type === 'email' ? 'Enter a valid email address.' : 'Check this value and try again.')); }, true);
-document.addEventListener('input', event => { event.target.setCustomValidity?.(''); if (event.target.form?.id === 'details-form' && ['name', 'phone'].includes(event.target.name)) state.detailsDraft = {...state.detailsDraft, [event.target.name]:event.target.value}; if (event.target.name === 'notes') state.notes = event.target.value; if (event.target.id === 'admin-search') { state.adminQuery = event.target.value; $('#admin-results').innerHTML = adminResults(); } });
+document.addEventListener('input', event => { event.target.setCustomValidity?.(''); if (event.target.form?.id === 'details-form' && ['name', 'phone'].includes(event.target.name)) state.detailsDraft = {...state.detailsDraft, [event.target.name]:event.target.value}; if (event.target.name === 'notes' && event.target.form?.id === 'details-form') state.notes = event.target.value; if (event.target.id === 'admin-search') { state.adminBookingId = null; state.adminQuery = event.target.value; $('#admin-results').innerHTML = adminResults(); } });
 document.addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.target, submit = $('button[type="submit"], button.button-primary', form);
-  if (submit?.disabled) return;
+  if (submit?.disabled || form.dataset.submitting) return;
+  form.dataset.submitting = 'true';
   if (submit) { submit.disabled = true; submit.setAttribute('aria-busy', 'true'); }
   const data = Object.fromEntries(new FormData(form));
   const errorField = $('.form-error', form); if (errorField) errorField.textContent = '';
@@ -398,12 +490,25 @@ document.addEventListener('submit', async event => {
       else { s.autoApprove = data.autoApprove === 'on'; s.outsideApproval = data.outsideApproval === 'on'; s.requiredApprovals = Number(data.requiredApprovals); }
       state.settings = (await api('/admin/settings', 'PUT', s)).settings; await route(); toast(h('Your settings have been saved.'));
     }
+    if (form.id === 'admin-reserve-form') {
+      const slot = form.slots?.find(s => s.time === data.time);
+      if (!slot) throw new Error(t('Choose an available time.'));
+      try {
+        await api('/admin/bookings', 'POST', {...data, expectedPrice: slot.price});
+      } catch (error) { await loadReserveSlots(form); throw error; }
+      closeModal(); state.adminFilter = 'all'; state.adminQuery = ''; state.adminDate = data.date;
+      await navigate('/admin'); toast(h('Reservation confirmed.'));
+    }
+    if (form.id === 'notification-settings-form') {
+      state.admin.notificationSettings = await api('/admin/notification-settings', 'PUT', {recipientIds:new FormData(form).getAll('recipientIds'),language:data.language});
+      render(); toast(h('Email notification settings saved.'));
+    }
     if (form.id === 'service-form') { await api(h`/admin/services${data.serviceId ? h`/${data.serviceId}` : ''}`, data.serviceId ? 'PUT' : 'POST', {...data, duration: Number(data.duration), price: Math.round(Number(data.price) * 100), outside_price: Math.round(Number(data.outside_price) * 100)}); closeModal(); await route(); toast(h('Service saved.')); }
     if (form.id === 'vacation-form') { await api('/admin/vacations', 'POST', data); await route(); toast(h('Time off added. These dates are closed for bookings.')); }
     if (form.id === 'team-form') { await api('/admin/team', 'PUT', {email: data.email, role: 'admin'}); await route(); toast(h('Administrator access granted. They can sign in again now.')); }
     if (form.id === 'prices-form') { state.services = (await api('/admin/prices', 'PUT', { services: state.admin.services.map(s => ({ id: s.id, price: Math.round(Number(data[h`price-${s.id}`]) * 100), outside_price: Math.round(Number(data[h`outside-${s.id}`]) * 100) })) })).services; await route(); toast(h('Your prices have been saved.')); }
   } catch (error) { const current = $('#modal').open ? $('#modal-error') : $('#form-error'); if (current) current.textContent = t(error.message); else toast(error.message); }
-  finally { if (submit) { submit.disabled = false; submit.removeAttribute('aria-busy'); } }
+  finally { delete form.dataset.submitting; if (submit) { submit.disabled = form.id === 'admin-reserve-form' && !form.elements.time.value; submit.removeAttribute('aria-busy'); } }
 });
 $('#modal').addEventListener('click', event => { if (event.target === $('#modal')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) closeModal(); } });
 window.addEventListener('popstate', () => { migrateHash(); route().catch(e => toast(e.message)); });
@@ -412,3 +517,7 @@ migrateHash();
 $('#year').textContent = new Date().getFullYear();
 try { Object.assign(state, await api('/bootstrap')); state.date = state.today; await route(); }
 catch (error) { $('#main').innerHTML = h`<div class="empty-state"><h1>We’ll be right with you.</h1><p>${esc(error.message)}</p><a class="button button-primary" href="/" data-reload>Try again</a></div>`; }
+
+setInterval(refreshNotifications, 30000);
+document.addEventListener('visibilitychange', refreshNotifications);
+refreshNotifications();
