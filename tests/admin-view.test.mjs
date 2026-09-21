@@ -31,3 +31,11 @@ test('client and service search combines with the selected queue and date',()=>{
   assert.deepEqual(ids('today',{query:'prerje'}),['today']);
   assert.deepEqual(ids('pending',{query:'Mira'}),[]);
 });
+test('contact search ignores phone separators and Albanian accents',()=>{
+  assert.deepEqual(ids('all',{query:'381456'}),['finish']);
+  assert.deepEqual(ids('all',{query:'(381) 456'}),['finish']);
+  const accented = [{...bookings[0],name:'Blerim Gëzim',service_name:'Ngjyrë'}];
+  assert.equal(selectAppointments(accented,{...options,view:'all',query:'gezim'}).length,1);
+  assert.equal(selectAppointments(accented,{...options,view:'all',query:'ngjyre'}).length,1);
+  assert.deepEqual(ids('all',{query:'call381456'}),[]);
+});

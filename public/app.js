@@ -1,6 +1,6 @@
-import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260921-notifications';
-import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260921-notifications';
-import { selectAppointments } from './admin-view.js?v=20260921-notifications';
+import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260921-admin-ux';
+import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260921-admin-ux';
+import { selectAppointments, matchesClient } from './admin-view.js?v=20260921-admin-ux';
 try { setLanguage(localStorage.getItem('erd-language') || (navigator.language.startsWith('sq') ? 'sq' : 'en')); } catch {}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -78,11 +78,13 @@ function updateBooking(html, selectionOnly) {
   }
 }
 function render({ selectionOnly = false } = {}) {
+  const keepEmailSettingsOpen = Boolean($('.email-settings[open]'));
   const focused = document.activeElement;
   const focusSelector = focused?.id ? '#' + CSS.escape(focused.id) : focused?.dataset.action ? Object.entries(focused.dataset)
     .filter(([key]) => key !== 'busy')
     .map(([key, value]) => h`[data-${key.replace(/[A-Z]/g, c => h`-${c.toLowerCase()}`)}="${CSS.escape(value)}"]`).join('') : null;
   updateNav();
+  document.body.classList.toggle('workspace-mode',state.route === 'admin' && isStaff());
   const main = $('#main');
   if (state.route === 'book') {
     if (renderedRoute === 'book' && renderedLanguage === getLanguage() && $('#booking-panel')) updateBooking(bookingPage(), selectionOnly);
@@ -100,6 +102,7 @@ function render({ selectionOnly = false } = {}) {
       while (old.children.length > children.length) old.lastElementChild.remove();
     } else main.replaceChildren(template.content);
   }
+  if (state.route === 'admin') { if (keepEmailSettingsOpen) $('.email-settings')?.setAttribute('open',''); restoreAdminForms(); }
   // Animate navigation, not every time or date selection.
   if (renderedRoute === state.route) main.querySelector('.page-enter')?.classList.remove('page-enter');
   if (renderedRoute === state.route && renderedStep === state.step) main.querySelector('.step-enter')?.classList.remove('step-enter');
@@ -173,6 +176,8 @@ function appointmentCard(b, admin = false) {
   const active = ['pending', 'confirmed'].includes(b.status);
   return h`<article class="appointment-card"><div class="appointment-date"><strong>${Number(b.date.slice(-2))}</strong><span>${dateLabel(b.date, { weekday: undefined, day: undefined, month: 'short' })}</span></div><div class="appointment-info"><div class="appointment-title"><h3>${esc(bookingName(b))}</h3><span class="badge badge-${b.status}">${({ pending: h('Awaiting approval'), confirmed: h('Confirmed'), completed: h('Completed'), cancelled: h('Cancelled'), declined: h('Declined') })[b.status]}</span></div><p>${dateLabel(b.date)} · ${b.time} · ${duration(b.duration)} · ${money(b.price)}${b.outside ? h(' · Outside hours') : ''}</p>${admin ? h`<p><strong>${esc(b.name)}</strong> · ${esc(b.email)} · ${esc(b.phone)}</p><p class="fine-print">${b.approvals} previous manual approval${b.approvals === 1 ? '' : 's'}${b.notes ? h` · Note: ${esc(b.notes)}` : ''}</p>` : ''}${b.repeat_weeks ? h`<p class="repeat-caption">${icon('repeat')} Repeats every ${b.repeat_weeks} week${b.repeat_weeks > 1 ? 's' : ''}</p>` : ''}${b.recurrence_note ? h`<p class="recurrence-note">${esc(t(b.recurrence_note))}</p>` : ''}</div><div class="appointment-actions">${admin && b.status === 'pending' ? h`<button class="button button-primary button-small" data-action="booking-action" data-id="${b.id}" data-value="approve">Approve</button><button class="text-button danger" data-action="booking-action" data-id="${b.id}" data-value="decline">Decline</button>` : admin && b.status === 'confirmed' ? h`<button class="button button-outline button-small" data-action="booking-action" data-id="${b.id}" data-value="complete" ${b.ends_at > Date.now() ? 'disabled title="Available after the appointment ends"' : ''}>Mark complete</button>` : ''}${active ? h`<button class="text-button subtle" data-action="cancel-open" data-id="${b.id}">Cancel${b.repeat_weeks ? h(' & stop repeats') : h(' visit')}</button>` : ''}</div></article>`;
 }
+const adminDrafts = new Map();
+const draftForms = new Set(['hours-form', 'rules-form', 'notification-settings-form', 'vacation-form', 'team-form']);
 const adminViews = { today: 'Today', pending: 'Requests', complete: 'To complete', upcoming: 'Upcoming', history: 'History', all: 'All visits' };
 function adminPage() {
   if (!isStaff()) return h`<section class="content-page">${heading(t('THE SALON WORKSPACE'), h('Salon <em>sign in.</em>'), state.user ? h`Signed in as ${esc(state.user.email)}. Administrator access is required.` : h('Sign in with your salon administrator account.'))}<button class="button button-primary" data-action="login">${state.user ? h('Use another account') : h('Admin sign in')} ${icon('arrow')}</button></section>`;
@@ -182,19 +187,20 @@ function adminPage() {
   const shift = data.settings.shifts[new Date(today + 'T12:00:00Z').getUTCDay()];
   const vacation = data.vacations.find(v => v.start_date <= today && v.end_date >= today);
   const counts = Object.fromEntries(['today', 'pending', 'complete', 'upcoming'].map(view => [view, selectAppointments(data.bookings, {view, today}).length]));
-  return h`<section class="content-page admin-page page-enter"><header class="workspace-heading"><div><p class="eyebrow">SALON OPERATIONS</p><h1>Salon workspace</h1><p>${dateLabel(today, {year:'numeric'})} <span aria-hidden="true">·</span> ${vacation ? h`Time off: ${esc(vacation.label)}` : shift.open ? h`Open ${shift.start}–${shift.end}` : h('No regular shift today')}</p></div><div class="workspace-heading-actions"><span class="owner-badge">${isOwner() ? h('Super admin') : h('Administrator')}</span><button class="button button-outline button-small" data-action="refresh-admin">${icon('repeat')} Refresh</button></div></header>
-    <div class="operations-stats">${[['today',h("Today's visits"),h('Your daily schedule')],['pending',h('Awaiting approval'),h('Review client requests')],['complete',h('Ready to complete'),h('Finish visits & renew repeats')],['upcoming',h('Upcoming'),h('All future active visits')]].map(([view,label,hint]) => h`<button class="operation-stat ${state.adminTab === 'appointments' && state.adminFilter === view ? 'selected' : ''}" data-action="admin-view" data-view="${view}"><span>${label}</span><strong>${counts[view]}</strong><small>${hint} ↗</small></button>`).join('')}</div>
-    <nav class="admin-tabs" aria-label="Salon workspace sections">${['appointments', 'hours', 'vacations', 'prices', 'rules', 'notifications', ...(isOwner() ? ['team'] : [])].map(t => h`<button data-action="admin-tab" data-tab="${t}" aria-current="${state.adminTab === t ? 'page' : 'false'}" class="${state.adminTab === t ? 'selected' : ''}">${({ appointments: h('Appointments'), hours: h('Working hours'), vacations: h('Time off'), team: h('Administrators'), prices: h('Services & prices'), rules: h('Booking rules'), notifications: h('Notifications') })[t]}${t === 'notifications' ? notificationCount() : ''}</button>`).join('')}</nav>
-    ${state.adminTab === 'appointments' ? adminAppointmentBook() : state.adminTab === 'notifications' ? notificationsPage() : state.adminTab === 'hours' ? hoursForm() : state.adminTab === 'vacations' ? vacationsForm() : state.adminTab === 'prices' ? pricesForm() : state.adminTab === 'team' && isOwner() ? teamForm() : rulesForm()}
+  const sections = [['appointments', 'Appointments', 'calendar'], ['notifications', 'Notifications', 'mail'], ['hours', 'Working hours', 'clock'], ['vacations', 'Time off', 'sun'], ['prices', 'Services & prices', 'scissors'], ['rules', 'Booking rules', 'check'], ...(isOwner() ? [['team', 'Administrators', 'shield']] : [])];
+  return h`<section class="content-page admin-page page-enter"><header class="workspace-heading"><div><p class="eyebrow">SALON OPERATIONS <span class="owner-badge">${isOwner() ? h('Super admin') : h('Administrator')}</span></p><h1>Salon workspace</h1><p>${dateLabel(today, {year:'numeric'})} <span aria-hidden="true">·</span> ${vacation ? h`Time off: ${esc(vacation.label)}` : shift.open ? h`Open ${shift.start}–${shift.end}` : h('No regular shift today')}</p></div><div class="workspace-heading-actions"><button class="button button-outline button-small" data-action="refresh-admin">${icon('repeat')} Refresh</button><button class="button button-primary" data-action="admin-reserve">New reservation <span aria-hidden="true">+</span></button></div></header>
+    <div class="admin-layout"><aside class="admin-sidebar"><label class="admin-section-picker">Workspace section<select id="admin-section">${sections.map(([key,label]) => h`<option value="${key}" ${state.adminTab === key ? 'selected' : ''}>${t(label)}${key === 'notifications' && state.notifications.unreadCount ? ' (' + state.notifications.unreadCount + ')' : ''}</option>`).join('')}</select></label><nav class="admin-navigation" aria-label="Salon workspace sections">${sections.map(([key,label,symbol],i) => h`${i === 0 ? h('<p class="nav-group-label">Daily work</p>') : i === 2 ? h('<p class="nav-group-label">Salon settings</p>') : ''}<a href="${adminPath(key)}" ${state.adminTab === key ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${t(label)}</span>${key === 'notifications' ? notificationCount() : ''}</a>`).join('')}</nav></aside>
+    <div class="admin-content" id="admin-content" tabindex="-1">${state.adminTab === 'appointments' ? h`<div class="operations-stats">${[['today',h("Today's visits")],['pending',h('Awaiting approval')],['complete',h('Ready to complete')],['upcoming',h('Upcoming')]].map(([view,label]) => h`<button class="operation-stat ${state.adminFilter === view && !state.adminDate && !state.adminQuery ? 'selected' : ''}" data-action="admin-view" data-view="${view}"><span>${label}</span><strong>${counts[view]}</strong></button>`).join('')}</div>${adminAppointmentBook()}` : state.adminTab === 'notifications' ? notificationsPage() : state.adminTab === 'hours' ? hoursForm() : state.adminTab === 'vacations' ? vacationsForm() : state.adminTab === 'prices' ? pricesForm() : state.adminTab === 'team' && isOwner() ? teamForm() : rulesForm()}</div></div>
     </section>`;
 }
 function adminAppointmentBook() {
-  return h`<section class="operations-book" aria-label="Appointment book"><div class="admin-section-heading"><h2>Appointments</h2><button class="button button-primary" data-action="admin-reserve">Reserve for client +</button></div><div class="operations-filters" role="group" aria-label="Appointment views">${Object.entries(adminViews).map(([view,label]) => h`<button data-action="admin-view" data-view="${view}" aria-pressed="${state.adminFilter === view}" class="${state.adminFilter === view ? 'selected' : ''}">${t(label)}</button>`).join('')}</div><div class="operations-search"><label>Find a client or service<input id="admin-search" type="search" placeholder="Name, email, phone or service" value="${esc(state.adminQuery)}" autocomplete="off"/></label><label>On a specific date<input id="admin-date" type="date" value="${state.adminDate}"/></label><button class="text-button" data-action="admin-clear">Clear filters</button></div><div id="admin-results">${adminResults()}</div></section>`;
+  return h`<section class="operations-book" aria-label="Appointment book"><div class="admin-section-heading"><div><h2>Appointments</h2><p>Review requests and manage your salon schedule.</p></div></div><label class="admin-view-picker">View appointments<select id="admin-view-select">${Object.entries(adminViews).map(([view,label]) => h`<option value="${view}" ${state.adminFilter === view ? 'selected' : ''}>${t(label)} (${selectAppointments(state.admin.bookings,{view,today:state.today}).length})</option>`).join('')}</select></label><div class="operations-filters" role="group" aria-label="Appointment views">${Object.entries(adminViews).map(([view,label]) => h`<button data-action="admin-view" data-view="${view}" aria-pressed="${state.adminFilter === view}" class="${state.adminFilter === view ? 'selected' : ''}">${t(label)}</button>`).join('')}</div><div class="operations-search"><label>Find a client or service<input id="admin-search" type="search" placeholder="Name, email, phone or service" value="${esc(state.adminQuery)}" autocomplete="off"/></label><label>On a specific date<input id="admin-date" type="date" value="${state.adminDate}"/></label></div><div class="agenda-toolbar"><div class="agenda-days" role="group" aria-label="Quick date selection"><button class="button button-outline button-small" data-action="admin-day" data-date="${state.today}">Today</button><button class="button button-outline button-small" data-action="admin-day" data-date="${dayAfter(state.today,1)}">Tomorrow</button></div><button class="text-button" data-action="admin-clear" ${!state.adminQuery && !state.adminDate && !state.adminBookingId ? 'hidden' : ''}>Clear filters</button></div>${state.adminBookingId ? h('<div class="single-booking-note">Viewing one reservation from notifications.<button class="text-button" data-action="admin-clear">Show all reservations</button></div>') : ''}<div id="admin-results">${adminResults()}</div></section>`;
 }
+
 function adminResults() {
   const bookings = selectAppointments(state.admin.bookings.filter(b => !state.adminBookingId || b.id === state.adminBookingId), {view:state.adminFilter, today:state.today, query:state.adminQuery, date:state.adminDate});
   let date = '';
-  return h`<p class="result-count" role="status">${bookings.length} ${bookings.length === 1 ? t('appointment') : t('appointments')} · ${t(adminViews[state.adminFilter])}</p>${bookings.length ? h`<div class="appointment-list">${bookings.map(b => { const heading = b.date !== date ? h`<h3 class="agenda-day">${b.date === state.today ? h('Today · ') : ''}${dateLabel(b.date, {year:'numeric'})}</h3>` : ''; date = b.date; return heading + adminAppointmentCard(b); }).join('')}</div>` : h`<div class="empty-state operations-empty">${icon('calendar')}<h3>${state.adminQuery || state.adminDate ? h('No matching appointments') : state.adminFilter === 'pending' ? h('All requests reviewed') : state.adminFilter === 'complete' ? h('Nothing waiting to be completed') : state.adminFilter === 'today' ? h('Your day is clear') : h('No appointments here')}</h3><p>${state.adminQuery || state.adminDate ? h('Try another search or clear the filters.') : h('Use the views above to check other appointments.')}</p><button class="button button-outline button-small" data-action="admin-view" data-view="all">View all appointments</button></div>`}`;
+  return h`<p class="result-count" role="status">${bookings.length} ${bookings.length === 1 ? t('appointment') : t('appointments')} · ${state.adminDate ? dateLabel(state.adminDate) : t(adminViews[state.adminFilter])}</p>${bookings.length ? h`<div class="appointment-list">${bookings.map(b => { const heading = b.date !== date ? h`<h3 class="agenda-day">${b.date === state.today ? h('Today · ') : ''}${dateLabel(b.date, {year:'numeric'})}</h3>` : ''; date = b.date; return heading + adminAppointmentCard(b); }).join('')}</div>` : h`<div class="empty-state operations-empty">${icon('calendar')}<h3>${state.adminQuery || state.adminDate ? h('No matching appointments') : state.adminFilter === 'pending' ? h('All requests reviewed') : state.adminFilter === 'complete' ? h('Nothing waiting to be completed') : state.adminFilter === 'today' ? h('Your day is clear') : h('No appointments here')}</h3><p>${state.adminQuery || state.adminDate ? h('Try another search or clear the filters.') : h('Use the views above to check other appointments.')}</p><button class="button button-outline button-small" data-action="admin-view" data-view="all">View all appointments</button></div>`}`;
 }
 function adminAppointmentCard(b) {
   const expired = b.status === 'pending' && b.starts_at <= Date.now();
@@ -204,26 +210,37 @@ function adminAppointmentCard(b) {
   return h`<article class="operation-appointment"><div class="agenda-time"><strong>${b.time}</strong><span>${duration(b.duration)}</span></div><div class="agenda-detail"><div class="appointment-title"><h3>${esc(b.name)}</h3><span class="badge badge-${b.status}">${expired ? h('Expired request') : ready ? h('Ready to complete') : ({pending:h('Needs approval'),confirmed:h('Confirmed'),completed:h('Completed'),cancelled:h('Cancelled'),declined:h('Declined')})[b.status]}</span></div><p class="agenda-service">${esc(bookingName(b))} <strong>${money(b.price)}</strong>${b.outside ? h(' · Outside hours') : ''}</p><div class="agenda-contact">${phone ? h`<a href="tel:${esc(phone)}">${esc(b.phone)}</a>` : ''}${b.email ? h`<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>` : ''}</div>${b.created_by ? h('<p class="fine-print">Booked by the salon</p>') : ''}${b.notes ? h`<p class="agenda-note"><strong>Client note:</strong> ${esc(b.notes)}</p>` : ''}${b.repeat_weeks ? h`<p class="repeat-caption">${icon('repeat')} Every ${b.repeat_weeks} week${b.repeat_weeks === 1 ? '' : 's'}</p>` : ''}${b.recurrence_note ? h`<p class="recurrence-note">${esc(t(b.recurrence_note))}</p>` : ''}${expired ? h('<p class="agenda-warning">This time has passed. Decline the request so the client can book again.</p>') : ''}${b.status === 'pending' && !expired ? h`<p class="fine-print">${b.approvals} manual approvals so far</p>` : ''}</div><div class="agenda-actions">${b.status === 'pending' ? h`${!expired ? h`<button class="button button-primary button-small" data-action="booking-action" data-id="${b.id}" data-value="approve">Approve ${icon('check')}</button>` : ''}<button class="text-button danger" data-action="admin-decline-open" data-id="${b.id}">Decline request</button>` : ready ? h`<button class="button button-primary button-small" data-action="${b.repeat_weeks ? 'admin-complete-open' : 'booking-action'}" data-id="${b.id}" data-value="complete">Complete visit ${icon('check')}</button>` : b.status === 'confirmed' ? h('<span class="fine-print">Complete after the visit ends</span>') : ''}${active ? h`<button class="text-button subtle" data-action="admin-cancel-open" data-id="${b.id}">Cancel visit</button>` : ''}</div></article>`;
 }
 async function adminReserveModal() {
+  if (!state.services.length) { openModal(h`<h2 id="modal-title">Add a service first</h2><p class="modal-description">Create your service menu before making a reservation.</p><a class="button button-primary" href="/admin/services">Services & prices ${icon('arrow')}</a>`); return; }
   const { clients } = await api('/admin/clients');
-  openModal(h`<h2 id="modal-title">Reserve for client</h2><p class="modal-description">Book a request received by phone or message. The appointment is confirmed immediately.</p>
+  openModal(h`<p class="eyebrow">PHONE & MESSAGE BOOKINGS</p><h2 id="modal-title">New reservation</h2><p class="modal-description">The appointment is confirmed immediately.</p>
     <form id="admin-reserve-form">
-      <label>Client<select name="userId" id="reserve-client"><option value="">Guest (no account)</option>${clients.map(u => h`<option value="${esc(u.id)}">${esc(u.name)} · ${esc(u.phone)} · ${esc(u.email)}</option>`).join('')}</select></label>
-      <fieldset id="reserve-guest" class="reserve-guest"><div class="field-grid"><label>Full name<input name="name" minlength="2" maxlength="100" autocomplete="off" required/></label><label>Phone number<input name="phone" type="tel" maxlength="30" autocomplete="off" required/></label></div></fieldset>
-      <label>Service<select name="serviceId" id="reserve-service" required>${state.services.map(s => h`<option value="${esc(s.id)}">${esc(serviceName(s))} · ${duration(s.duration)}</option>`).join('')}</select></label>
-      <div class="field-grid"><label>Date<input name="date" id="reserve-date" type="date" value="${state.today}" min="${state.today}" max="${dayAfter(state.today, 90)}" required/></label><label>Time<select name="time" id="reserve-time" required disabled><option value="">Choose a time</option></select></label></div>
-      <p class="fine-print" id="reserve-status" role="status"></p><button class="text-button" type="button" data-action="reserve-retry" hidden>Try again</button>
-      <p class="fine-print">All appointment times are in ${esc(state.settings.timezone)}.</p>
-      <label>Notes (optional)<textarea name="notes" maxlength="1000" rows="2"></textarea></label>
-      <p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" type="submit" disabled>Confirm reservation</button>
+      <fieldset class="reserve-section"><legend>1. Client details</legend><div class="reserve-client-modes"><label><input type="radio" name="clientMode" value="guest" checked/>Guest / new client</label><label><input type="radio" name="clientMode" value="existing"/>Registered client</label></div>
+      <fieldset id="reserve-existing" class="reserve-existing" hidden disabled><label>Find a registered client<input id="reserve-client-search" type="search" placeholder="Name, email or phone" autocomplete="off"/></label><label>Client<select name="userId" id="reserve-client" required><option value="">Choose a client</option>${clientOptions(clients)}</select></label><p id="reserve-client-status" class="fine-print" role="status"></p></fieldset>
+      <fieldset id="reserve-guest" class="reserve-guest"><div class="field-grid"><label>Full name<input name="name" minlength="2" maxlength="100" autocomplete="off" required/></label><label>Phone number<input name="phone" type="tel" maxlength="30" autocomplete="off" placeholder="+383 …" required/></label></div></fieldset></fieldset>
+      <fieldset class="reserve-section"><legend>2. Service & time</legend><label>Service<select name="serviceId" id="reserve-service" required>${state.services.map(s => h`<option value="${esc(s.id)}">${esc(serviceName(s))} · ${duration(s.duration)}</option>`).join('')}</select></label>
+      <div class="field-grid"><label>Date<input name="date" id="reserve-date" type="date" value="${state.adminDate >= state.today && state.adminDate <= dayAfter(state.today,90) ? state.adminDate : state.today}" min="${state.today}" max="${dayAfter(state.today, 90)}" required/></label><label>Time<select name="time" id="reserve-time" required disabled><option value="">Choose a time</option></select></label></div>
+      <p class="fine-print" id="reserve-status" role="status"></p><button class="text-button" type="button" data-action="reserve-retry" hidden>Try again</button><p class="fine-print">All appointment times are in ${esc(state.settings.timezone)}.</p></fieldset>
+      <label>Notes (optional)<textarea name="notes" maxlength="1000" rows="2" placeholder="Client preferences or details for the barber"></textarea></label>
+      <div class="reservation-footer"><div id="reserve-summary" class="reserve-summary" aria-live="polite"></div><p class="form-error" id="modal-error" role="alert"></p><div class="form-footer"><button class="button button-outline" type="button" data-action="modal-close">Cancel</button><button class="button button-primary" type="submit" disabled>Confirm reservation</button></div></div>
     </form>`);
+  $('#modal').classList.add('reservation-dialog');
+  $('#admin-reserve-form').clients = clients;
   await loadReserveSlots();
+}
+function clientOptions(clients) { return clients.map(u => h`<option value="${esc(u.id)}">${esc(u.name)} · ${esc(u.phone || u.email)}</option>`).join(''); }
+function updateReserveSummary() {
+  const form = $('#admin-reserve-form'); if (!form) return;
+  const slot = form.slots?.find(s => s.time === form.elements.time.value);
+  $('#reserve-summary').innerHTML = slot ? h`<div><strong>${dateLabel(form.elements.date.value)} · ${slot.time}</strong><span>${esc(serviceName(state.services.find(s => s.id === form.elements.serviceId.value)))}${slot.outside ? h(' · Outside hours') : ''}</span></div><strong>${money(slot.price)}</strong>` : h('<span>Choose a time to review the price and confirm.</span>');
+  $('button[type="submit"]',form).disabled = !slot || Boolean(form.dataset.submitting);
 }
 async function loadReserveSlots(form = $('#admin-reserve-form')) {
   if (!form?.isConnected) return;
   const request = (form.slotRequest || 0) + 1; form.slotRequest = request;
   const time = $('#reserve-time'), status = $('#reserve-status'), submit = $('button[type="submit"]', form), retry = $('[data-action="reserve-retry"]', form);
   form.slots = []; time.disabled = true; submit.disabled = true; retry.hidden = true;
-  time.innerHTML = h('<option value="">Choose a time</option>'); status.textContent = t('Loading available times…');
+  time.innerHTML = h('<option value="">Choose a time</option>'); updateReserveSummary(); status.textContent = t('Loading available times…');
+  if (!form.elements.date.validity.valid || !form.elements.date.value) { status.textContent = t('Choose a date within the next 90 days.'); return; }
   try {
     const result = await api(`/availability?service=${encodeURIComponent(form.elements.serviceId.value)}&date=${encodeURIComponent(form.elements.date.value)}`);
     if (!form.isConnected || request !== form.slotRequest) return;
@@ -241,8 +258,8 @@ function notificationCount() {
 }
 function notificationsPage() {
   const prefs = state.admin.notificationSettings;
-  return h`<section class="notifications-page">
-    ${isOwner() && prefs ? h`<form id="notification-settings-form" class="admin-form"><h2>Email notifications</h2>
+  return h`<section class="notifications-page"><div class="notification-feed">${notificationFeed()}</div>
+    ${isOwner() && prefs ? h`<details class="email-settings" ${adminDrafts.has("notification-settings-form") ? 'open' : ''}><summary>${icon("mail")} Email notification settings <span class="owner-badge">Super admin</span></summary><form id="notification-settings-form" class="admin-form"><h2>Email notifications</h2>
       <p>Only the super admin can choose who receives emails for new reservations and cancellations.</p>
       <p>Select verified administrators below. The person making the change will not receive their own alert. Changes apply to future notifications; deselecting someone also stops their unsent emails.</p>
       ${!prefs.emailConfigured ? h('<p class="info-box">Email delivery is not configured. Notifications stay in the panel and selected emails wait until delivery is configured.</p>') : ''}
@@ -250,9 +267,8 @@ function notificationsPage() {
       <p class="fine-print">Leave everyone unselected to turn off booking emails. Add administrators in the Administrators section.</p>
       <label>Email language<select name="language"><option value="en" ${prefs.language === 'en' ? 'selected' : ''}>English</option><option value="sq" ${prefs.language === 'sq' ? 'selected' : ''}>Shqip</option></select></label>
       <div id="notification-delivery-status">${notificationDeliveryStatus(prefs)}</div>
-      <p class="form-error" id="form-error" role="alert"></p><button type="submit" class="button button-primary">Save email recipients</button>
-    </form>` : ''}
-    <div class="notification-feed">${notificationFeed()}</div>
+      <p class="form-error" id="form-error" role="alert"></p>${adminSaveBar("Save email recipients")}
+    </form></details>` : ''}
   </section>`;
 }
 function notificationDeliveryStatus(prefs) {
@@ -266,6 +282,7 @@ function notificationFeed() {
 function updateNotificationDisplay() {
   updateNav();
   document.querySelectorAll('.notification-count').forEach(el => { el.textContent = state.notifications.unreadCount; el.hidden = !state.notifications.unreadCount; el.setAttribute('aria-label', t('Unread notifications') + ': ' + state.notifications.unreadCount); });
+  const option = $('#admin-section option[value="notifications"]'); if (option) option.textContent = t('Notifications') + (state.notifications.unreadCount ? ' (' + state.notifications.unreadCount + ')' : '');
   const feed = $('.notification-feed'); if (feed) feed.innerHTML = notificationFeed();
 }
 async function refreshNotifications() {
@@ -281,29 +298,83 @@ async function refreshNotifications() {
 }
 function hoursForm() {
   const s = state.admin.settings;
-  return h`<form id="hours-form" class="admin-form"><h2>Your working week</h2><p>Clients can book a full service within these shifts. Times are in ${esc(s.timezone)}. Existing appointments keep their agreed time and price.</p><div class="shift-tools"><button class="button button-outline button-small" type="button" data-action="copy-weekdays">Copy Monday to Tue–Fri</button><span>Then save to apply your changes.</span></div><div class="shift-grid">${s.shifts.map(day => h`<div class="shift-row"><label class="switch-label"><input type="checkbox" name="open-${day.day}" ${day.open ? 'checked' : ''}/><span>${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[day.day]}</span></label><input type="time" name="start-${day.day}" value="${day.start}" aria-label="${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[day.day]} start" required/><span>to</span><input type="time" name="end-${day.day}" value="${day.end}" aria-label="${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[day.day]} end" required/></div>`).join('')}</div><h3>A little outside the usual hours</h3><label class="switch-label"><input type="checkbox" name="allowOutside" ${s.allowOutside ? 'checked' : ''}/>Allow requests outside working shifts, including closed days</label><div class="field-grid"><label>Earliest request time<input type="time" name="outsideStart" value="${s.outsideStart}" required/></label><label>Latest finish time<input type="time" name="outsideEnd" value="${s.outsideEnd}" required/></label></div><p class="form-error" id="form-error" role="alert"></p><div class="admin-save-bar"><span>Changes apply when you save.</span><button class="button button-primary" type="submit">Save working hours ${icon('check')}</button></div></form>`;
+  return h`<form id="hours-form" class="admin-form"><h2>Working hours</h2><p>Clients can book a full service within these shifts. Times are in ${esc(s.timezone)}. Existing appointments keep their agreed time and price.</p><div class="shift-tools"><button class="button button-outline button-small" type="button" data-action="copy-weekdays">Copy Monday to Tue–Fri</button><span>Then save to apply your changes.</span></div><div class="shift-grid">${s.shifts.map(day => h`<div class="shift-row"><label class="switch-label"><input type="checkbox" name="open-${day.day}" ${day.open ? 'checked' : ''}/><span>${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[day.day]}</span></label><input type="time" name="start-${day.day}" value="${day.start}" aria-label="${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[day.day]} start" required/><span>to</span><input type="time" name="end-${day.day}" value="${day.end}" aria-label="${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(t)[day.day]} end" required/></div>`).join('')}</div><h3>A little outside the usual hours</h3><label class="switch-label"><input type="checkbox" name="allowOutside" ${s.allowOutside ? 'checked' : ''}/>Allow requests outside working shifts, including closed days</label><div class="field-grid"><label>Earliest request time<input type="time" name="outsideStart" value="${s.outsideStart}" required/></label><label>Latest finish time<input type="time" name="outsideEnd" value="${s.outsideEnd}" required/></label></div><p class="form-error" id="form-error" role="alert"></p>${adminSaveBar("Save working hours")}</form>`;
 }
 function pricesForm() {
   return h`<div class="admin-form"><div class="admin-section-heading"><div><h2>Your service menu</h2><p>Add just what you offer. Prices are in ${esc(state.settings.currency)}; changes apply to new bookings.</p></div><button class="button button-primary" data-action="service-edit">Add service +</button></div><div class="admin-items">${state.admin.services.map(s => h`<article class="admin-item"><div><h3>${esc(serviceName(s))}</h3><p>${esc(t(s.category))} · ${duration(s.duration)}</p><p>${money(s.price)} in hours · ${money(s.outside_price)} outside hours</p></div><div class="admin-item-actions"><button class="button button-outline" data-action="service-edit" data-id="${s.id}" aria-label="Edit ${esc(serviceName(s))}">Edit</button><button class="text-button" data-action="service-remove-open" data-id="${s.id}" aria-label="Remove ${esc(serviceName(s))}">Remove</button></div></article>`).join('') || h('<p class="empty-slots">No services yet. Add your first service to open bookings.</p>')}</div></div>`;
 }
 function serviceEditor(id) {
   const s = state.admin.services.find(s => s.id === id) || {name: '', description: '', duration: 30, price: 2500, outside_price: 3500, category: 'Cut & style'};
-  openModal(h`<p class="eyebrow">YOUR SERVICE MENU</p><h2 id="modal-title">${id ? h('Edit service') : h('A new service')}</h2><p class="modal-description">Existing appointments keep their details. Repeats pause if their price changes.</p><form id="service-form"><input type="hidden" name="serviceId" value="${id || ''}"/><label>Service name<input name="name" value="${esc(s.name)}" minlength="2" maxlength="100" required/></label><label>Service name (Albanian)<input name="name_sq" value="${esc(s.name_sq || '')}" maxlength="100"/></label><label>Description (Albanian)<textarea name="description_sq" rows="2" maxlength="300">${esc(s.description_sq || '')}</textarea></label><p class="fine-print">Optional; uses the original text when empty.</p><label>Short description<textarea name="description" rows="2" maxlength="300">${esc(s.description)}</textarea></label><div class="field-grid"><label>Category<select name="category">${['Cut & style', 'Color', 'Treatments'].map(c => h`<option value="${esc(c)}" ${c === s.category ? 'selected' : ''}>${esc(t(c))}</option>`).join('')}</select></label><label>Duration (minutes)<input name="duration" type="number" min="15" max="480" step="15" value="${s.duration}" required/></label></div><div class="field-grid"><label>In-hours price (${esc(state.settings.currency)})<input name="price" type="number" min="0" max="10000" step="0.01" value="${s.price / 100}" required/></label><label>Outside-hours price<input name="outside_price" type="number" min="0" max="10000" step="0.01" value="${s.outside_price / 100}" required/></label></div><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" type="submit">Save service ${icon('check')}</button></form>`);
+  openModal(h`<p class="eyebrow">YOUR SERVICE MENU</p><h2 id="modal-title">${id ? h('Edit service') : h('A new service')}</h2><p class="modal-description">Existing appointments keep their details. Repeats pause if their price changes.</p><form id="service-form"><input type="hidden" name="serviceId" value="${id || ''}"/><label>Service name<input name="name" value="${esc(s.name)}" minlength="2" maxlength="100" required/></label><label>Short description<textarea name="description" rows="2" maxlength="300">${esc(s.description)}</textarea></label><div class="field-grid"><label>Category<select name="category">${['Cut & style', 'Color', 'Treatments'].map(c => h`<option value="${esc(c)}" ${c === s.category ? 'selected' : ''}>${esc(t(c))}</option>`).join('')}</select></label><label>Duration (minutes)<input name="duration" type="number" min="15" max="480" step="15" value="${s.duration}" required/></label></div><div class="field-grid"><label>In-hours price (${esc(state.settings.currency)})<input name="price" type="number" min="0" max="10000" step="0.01" value="${s.price / 100}" required/></label><label>Outside-hours price<input name="outside_price" type="number" min="0" max="10000" step="0.01" value="${s.outside_price / 100}" required/></label></div><details class="service-translations"><summary>Albanian translation (optional)</summary><label>Service name (Albanian)<input name="name_sq" value="${esc(s.name_sq || '')}" maxlength="100"/></label><label>Description (Albanian)<textarea name="description_sq" rows="2" maxlength="300">${esc(s.description_sq || '')}</textarea></label><p class="fine-print">Optional; uses the original text when empty.</p></details><div class="admin-dialog-footer"><p class="form-error" id="modal-error" role="alert"></p><div class="dialog-actions"><button class="button button-outline" type="button" data-action="modal-close">Cancel</button><button class="button button-primary" type="submit">Save service ${icon('check')}</button></div></div></form>`);
 }
 function vacationsForm() {
-  return h`<div class="admin-form"><h2>Make room for a break</h2><p>Block a holiday, vacation, or a single day off for the whole salon. Both dates are included. No appointments can be requested during time off, including outside hours.</p><form id="vacation-form"><label>Label<input name="label" maxlength="100" placeholder="Summer vacation"/></label><div class="field-grid"><label>First day off<input name="startDate" type="date" required/></label><label>Last day off<input name="endDate" type="date" required/></label></div><p class="fine-print">Resolve any active appointments in these dates before adding time off.</p><p class="form-error" id="form-error" role="alert"></p><button class="button button-primary" type="submit">Add time off ${icon('check')}</button></form><div class="admin-items">${state.admin.vacations.map(v => h`<article class="admin-item"><div><h3>${esc(v.label)}</h3><p>${dateLabel(v.start_date, {year:'numeric'})}${v.start_date !== v.end_date ? h` – ${dateLabel(v.end_date, {year:'numeric'})}` : ''}</p></div><button class="text-button" data-action="vacation-remove-open" data-id="${v.id}" aria-label="Remove ${esc(v.label)}">Remove</button></article>`).join('') || h('<p class="empty-slots">No time off added yet.</p>')}</div></div>`;
+  return h`<div class="admin-form"><h2>Time off</h2><p>Block a holiday, vacation, or a single day off for the whole salon. Both dates are included. No appointments can be requested during time off, including outside hours.</p><form id="vacation-form"><label>Label<input name="label" maxlength="100" placeholder="Summer vacation"/></label><div class="field-grid"><label>First day off<input name="startDate" type="date" required/></label><label>Last day off<input name="endDate" type="date" required/></label></div><p class="fine-print">Resolve any active appointments in these dates before adding time off.</p><p class="form-error" id="form-error" role="alert"></p>${adminSaveBar("Add time off")}</form><div class="admin-items">${state.admin.vacations.map(v => h`<article class="admin-item"><div><h3>${esc(v.label)}</h3><p>${dateLabel(v.start_date, {year:'numeric'})}${v.start_date !== v.end_date ? h` – ${dateLabel(v.end_date, {year:'numeric'})}` : ''}</p></div><button class="text-button" data-action="vacation-remove-open" data-id="${v.id}" aria-label="Remove ${esc(v.label)}">Remove</button></article>`).join('') || h('<p class="empty-slots">No time off added yet.</p>')}</div></div>`;
 }
 function teamForm() {
-  return h`<div class="admin-form"><h2>The people behind the salon</h2><p>Your super-admin account is protected. Only you can give or remove administrator access. Administrators manage appointments, the shared salon shifts, time off, services, and booking rules.</p><form id="team-form"><label>Registered email address<input name="email" type="email" maxlength="254" placeholder="name@example.com" required/></label><p class="fine-print">This person must register and verify their email first. After an access change, they need to sign in again.</p><p class="form-error" id="form-error" role="alert"></p><button class="button button-primary" type="submit">Make administrator ${icon('shield')}</button></form><div class="admin-items">${state.admin.admins.map(u => h`<article class="admin-item"><div><h3>${esc(u.name)}</h3><p>${esc(u.email)}</p></div>${u.role === 'super_admin' ? h('<span class="owner-badge">Super admin · Protected</span>') : h`<button class="text-button" data-action="admin-remove-open" data-email="${esc(u.email)}">Remove admin access</button>`}</article>`).join('')}</div></div>`;
+  return h`<div class="admin-form"><h2>Administrators</h2><p>Your super-admin account is protected. Only you can give or remove administrator access. Administrators manage appointments, the shared salon shifts, time off, services, and booking rules.</p><form id="team-form"><label>Registered email address<input name="email" type="email" maxlength="254" placeholder="name@example.com" required/></label><p class="fine-print">This person must register and verify their email first. After an access change, they need to sign in again.</p><p class="form-error" id="form-error" role="alert"></p>${adminSaveBar("Make administrator")}</form><div class="admin-items">${state.admin.admins.map(u => h`<article class="admin-item"><div><h3>${esc(u.name)}</h3><p>${esc(u.email)}</p></div>${u.role === 'super_admin' ? h('<span class="owner-badge">Super admin · Protected</span>') : h`<button class="text-button" data-action="admin-remove-open" data-email="${esc(u.email)}">Remove admin access</button>`}</article>`).join('')}</div></div>`;
 }
-function rulesForm() { const s = state.admin.settings; return h`<form id="rules-form" class="admin-form"><h2>Booking, your way.</h2><p>A few simple rules keep your appointment book feeling manageable.</p><label class="rule-setting"><div><strong>Automatically approve returning clients</strong><p>After the required number of manual approvals, future appointments are confirmed instantly. Turn this off to review every request.</p></div><input type="checkbox" name="autoApprove" ${s.autoApprove ? 'checked' : ''}/></label><label class="rule-setting"><div><strong>Manual approvals before automatic booking</strong><p>Default: 2 approvals per client. Set to 0 to auto-approve from the first visit.</p></div><input type="number" name="requiredApprovals" min="0" max="20" value="${s.requiredApprovals}" required/></label><label class="rule-setting"><div><strong>Always review outside-hours requests</strong><p>Even regular clients need your approval for visits outside your working shifts.</p></div><input type="checkbox" name="outsideApproval" ${s.outsideApproval ? 'checked' : ''}/></label><div class="info-box">${icon('shield')}<div><strong>A simple foundation.</strong><p>Online booking requires a verified email and allows one active visit per account. Admins can also confirm bookings for clients by phone or message. Repeats create the next visit after completion and follow these same rules. Changes apply to new requests.</p></div></div><p class="form-error" id="form-error" role="alert"></p><button class="button button-primary">Save booking rules ${icon('check')}</button></form>`; }
+function rulesForm() { const s = state.admin.settings; return h`<form id="rules-form" class="admin-form"><h2>Booking rules</h2><p>A few simple rules keep your appointment book feeling manageable.</p><label class="rule-setting"><div><strong>Automatically approve returning clients</strong><p>After the required number of manual approvals, future appointments are confirmed instantly. Turn this off to review every request.</p></div><input type="checkbox" name="autoApprove" ${s.autoApprove ? 'checked' : ''}/></label><label class="rule-setting"><div><strong>Manual approvals before automatic booking</strong><p>Default: 2 approvals per client. Set to 0 to auto-approve from the first visit.</p></div><input type="number" name="requiredApprovals" min="0" max="20" value="${s.requiredApprovals}" required/></label><label class="rule-setting"><div><strong>Always review outside-hours requests</strong><p>Even regular clients need your approval for visits outside your working shifts.</p></div><input type="checkbox" name="outsideApproval" ${s.outsideApproval ? 'checked' : ''}/></label><div class="info-box">${icon('shield')}<div><strong>A simple foundation.</strong><p>Online booking requires a verified email and allows one active visit per account. Admins can also confirm bookings for clients by phone or message. Repeats create the next visit after completion and follow these same rules. Changes apply to new requests.</p></div></div><p class="form-error" id="form-error" role="alert"></p>${adminSaveBar("Save booking rules")}</form>`; }
+
+function adminSaveBar(label) { return h`<div class="admin-save-bar"><span class="admin-draft-status" role="status">Changes apply when you save.</span><div><button type="button" class="text-button" data-action="admin-reset" hidden>Reset changes</button><button class="button button-primary" type="submit">${t(label)} ${icon('check')}</button></div></div>`; }
+function formValues(form) { return [...form.elements].filter(el => el.name && !['submit','button'].includes(el.type)).map(el => ({name:el.name, value:el.value, checked:el.checked})); }
+function restoreAdminForms() {
+  for (const form of document.querySelectorAll('#admin-content form')) {
+    if (!draftForms.has(form.id)) continue;
+    const submit = $('button[type="submit"]',form); if (submit) submit.id ||= form.id + '-save';
+    // Baseline comes from server-rendered values, before the local draft is restored.
+    if (!form.dataset.baseline) form.dataset.baseline = JSON.stringify(formValues(form));
+    const draft = adminDrafts.get(form.id);
+    if (draft) for (const field of draft) {
+      const el = [...form.elements].find(el => el.name === field.name && (el.type !== 'checkbox' || el.value === field.value));
+      if (el) { el.value = field.value; if (field.checked !== undefined) el.checked = field.checked; }
+    }
+    syncAdminForm(form);
+  }
+}
+function recordAdminDraft(form) {
+  if (!form || !draftForms.has(form.id)) return;
+  const values = formValues(form);
+  if (JSON.stringify(values) === form.dataset.baseline) adminDrafts.delete(form.id); else adminDrafts.set(form.id,values);
+  syncAdminForm(form);
+}
+function syncAdminForm(form) {
+  const dirty = adminDrafts.has(form.id), status = $('.admin-draft-status', form), reset = $('[data-action="admin-reset"]',form);
+  if (status) status.textContent = t(dirty ? 'Unsaved changes · kept while switching sections.' : 'Changes apply when you save.');
+  if (reset) reset.hidden = !dirty;
+  form.classList.toggle('has-draft',dirty);
+  if (form.id === 'hours-form') {
+    for (const row of form.querySelectorAll('.shift-row')) {
+      const closed = !$('input[type="checkbox"]',row).checked;
+      row.classList.toggle('shift-closed',closed);
+      row.querySelectorAll('input[type="time"]').forEach(el => { el.disabled = closed; });
+    }
+    for (const name of ['outsideStart','outsideEnd']) form.elements[name].disabled = !form.elements.allowOutside.checked;
+  }
+  if (form.id === 'vacation-form') form.elements.endDate.min = form.elements.startDate.value;
+}
+async function setAdminView(view) { state.adminTab = 'appointments'; state.adminFilter = view; state.adminQuery = ''; state.adminDate = ''; state.adminBookingId = null; if (location.search || location.pathname !== '/admin') await navigate('/admin'); else render(); }
+function clearBookingLink() { state.adminBookingId = null; if (location.search) history.replaceState(null,'','/admin'); }
+function updateAdminFilters() {
+  $('#admin-results').innerHTML = adminResults();
+  if ($('#admin-view-select')) $('#admin-view-select').value = state.adminFilter;
+  document.querySelectorAll('.operations-filters [data-view]').forEach(el => { const selected = el.dataset.view === state.adminFilter; el.classList.toggle('selected',selected); el.setAttribute('aria-pressed',String(selected)); });
+  document.querySelectorAll('.operation-stat').forEach(el => el.classList.toggle('selected', el.dataset.view === state.adminFilter && !state.adminDate && !state.adminQuery));
+  $('.single-booking-note')?.remove();
+  const clear = $('.agenda-toolbar [data-action="admin-clear"]'); if (clear) clear.hidden = !state.adminQuery && !state.adminDate;
+}
+function showFormError(field, message) {
+  if (!field) { toast(message); return; }
+  field.textContent = t(message); field.setAttribute('tabindex','-1'); field.focus();
+}
 
 function openModal(content) {
   const dialog = $('#modal');
   if (!dialog.open) modalReturnFocus = document.activeElement;
+  dialog.classList.remove('reservation-dialog');
+  dialog.classList.toggle('admin-dialog', state.route === 'admin' && isStaff());
   dialog.innerHTML = h`<button class="modal-close" data-action="modal-close" aria-label="Close dialog">${icon('close')}</button>${content}`;
   if (!dialog.open) dialog.showModal();
-  requestAnimationFrame(() => $('input:not([type="hidden"]), .button', dialog)?.focus());
+  requestAnimationFrame(() => $('input:not([type="hidden"]):not([type="radio"]):not([type="search"]):not(:disabled), select:not(:disabled), .button', dialog)?.focus());
 }
 function closeModal() { $('#modal').close(); modalReturnFocus?.focus(); }
 function authModal(mode = 'login') {
@@ -348,7 +419,7 @@ async function route() {
   if (state.adminBookingId) { state.adminFilter = 'all'; state.adminQuery = ''; state.adminDate = ''; }
   if (notifications) state.notifications = notifications;
   if (bookings) state.bookings = bookings;
-  if (session) { state.user = session.user; state.today = session.today; state.admin = admin || null; }
+  if (session) { if (session.user?.id !== state.user?.id) adminDrafts.clear(); state.user = session.user; state.today = session.today; state.admin = admin || null; }
   if (page.adminTab) state.adminTab = page.adminTab;
   if (admin) { state.services = admin.services; state.settings = admin.settings; if (!service()) { state.step = 0; state.slot = null; } }
   render();
@@ -365,7 +436,7 @@ async function navigate(path, {replace = false} = {}) {
   if (!pagePath(url.pathname) || url.origin !== location.origin) return;
   if (url.pathname + url.search !== location.pathname + location.search) history[replace ? 'replaceState' : 'pushState'](null, '', url.pathname + url.search);
   if (await route()) {
-    if (previousPage === 'admin' && state.route === 'admin') return;
+    if (previousPage === 'admin' && state.route === 'admin') { $('#admin-content')?.focus({preventScroll:true}); window.scrollTo({top:0,behavior:motion()}); return; }
     if (state.route === 'book' && state.step > 0) focusBookingStep();
     else window.scrollTo({top:0,behavior:motion()});
   }
@@ -394,11 +465,11 @@ async function action(button) {
   if (a === 'retry-slots') await loadSlots();
   if (a === 'time') { if (state.slotsLoading) return; state.slot = state.slots.find(s => s.time === button.dataset.time && s.available); render({selectionOnly:true}); }
   if (a === 'login' || a === 'register') authModal(a);
-  if (a === 'modal-close') closeModal();
+  if (a === 'modal-close' && !$('#modal form[data-submitting]')) closeModal();
   if (a === 'verify-open') verifyModal();
   if (a === 'resend') { const result = await api('/auth/resend', 'POST', {}); state.devCode = result.devCode; verifyModal(); toast(state.devCode ? h('A new local verification code is ready.') : h('A new code is on its way.')); }
   if (a === 'account') openModal(h`<p class="eyebrow">YOUR LITTLE CORNER</p><h2 id="modal-title">Hello, ${esc(state.user.name.split(' ')[0])}.</h2><p class="modal-description">${esc(state.user.email)} · ${state.user.verified ? h('Verified') : h('Not yet verified')}</p><div class="account-menu"><a class="button button-outline" href="/appointments" data-action="modal-close">${icon('calendar')} My visits</a>${!state.user.verified ? h('<button class="button button-outline" data-action="verify-open">Verify email</button>') : ''}${isStaff() ? h('<a class="button button-outline" href="/admin" data-action="modal-close">Salon workspace ↗</a>') : ''}<button class="text-button" data-action="logout">Sign out</button></div>`);
-  if (a === 'logout') { await api('/auth/logout', 'POST', {}); state.user = null; state.detailsDraft = null; state.devCode = null; state.bookings = []; state.admin = null; state.notifications = {items:[],unreadCount:0}; if (state.step > 2) state.step = 2; closeModal(); await route(); toast(h('You’re signed out. See you soon.')); }
+  if (a === 'logout') { await api('/auth/logout', 'POST', {}); state.user = null; adminDrafts.clear(); state.detailsDraft = null; state.devCode = null; state.bookings = []; state.admin = null; state.notifications = {items:[],unreadCount:0}; if (state.step > 2) state.step = 2; closeModal(); await route(); toast(h('You’re signed out. See you soon.')); }
   if (a === 'admin-entry') { if (state.user) { await navigate('/admin'); } else { state.authIntent = 'admin'; authModal(); } }
   if (a === 'book') {
     const { booking } = await api('/bookings', 'POST', { serviceId: state.serviceId, date: state.date, time: state.slot.time, repeatWeeks: state.repeatWeeks, notes: state.notes, expectedPrice: state.slot.price });
@@ -420,9 +491,11 @@ async function action(button) {
   if (a === 'vacation-remove') { await api(h`/admin/vacations/${button.dataset.id}`, 'DELETE', {}); closeModal(); await route(); toast(h('Time off removed.')); }
   if (a === 'admin-remove-open') openModal(h`<h2 id="modal-title">Remove admin access?</h2><p class="modal-description">${esc(button.dataset.email)} will keep their client account and appointments. Their administrator access will end immediately.</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="admin-remove" data-email="${esc(button.dataset.email)}">Remove admin access</button><button class="text-button full-width cancel-keep" data-action="modal-close">Keep access</button>`);
   if (a === 'admin-remove') { await api('/admin/team', 'PUT', {email: button.dataset.email, role: 'client'}); closeModal(); await route(); toast(h('Administrator access removed.')); }
-  if (a === 'admin-view') { state.adminTab = 'appointments'; state.adminFilter = button.dataset.view; state.adminQuery = ''; state.adminDate = ''; state.adminBookingId = null; if (location.search || location.pathname !== '/admin') await navigate('/admin'); else render(); }
-  if (a === 'admin-clear') { state.adminQuery = ''; state.adminDate = ''; state.adminBookingId = null; history.replaceState(null, '', '/admin'); render(); }
-  if (a === 'copy-weekdays') { const form = $('#hours-form'); for (let day = 2; day <= 5; day++) { form.elements[h`open-${day}`].checked = form.elements['open-1'].checked; form.elements[h`start-${day}`].value = form.elements['start-1'].value; form.elements[h`end-${day}`].value = form.elements['end-1'].value; } toast(h('Monday copied to Tuesday–Friday. Save working hours to apply.')); }
+  if (a === 'admin-view') await setAdminView(button.dataset.view);
+  if (a === 'admin-reset') { const form = button.form; adminDrafts.delete(form.id); form.reset(); [...form.elements].forEach(el => el.setCustomValidity?.('')); syncAdminForm(form); $('.form-error',form).textContent = ''; $('button[type="submit"]',form)?.focus({preventScroll:true}); }
+  if (a === 'admin-day') { clearBookingLink(); state.adminFilter = 'all'; state.adminQuery = ''; state.adminDate = button.dataset.date; render(); }
+  if (a === 'admin-clear') { state.adminQuery = ''; state.adminDate = ''; state.adminFilter = 'all'; state.adminBookingId = null; history.replaceState(null, '', '/admin'); render(); }
+  if (a === 'copy-weekdays') { const form = $('#hours-form'); for (let day = 2; day <= 5; day++) { form.elements[h`open-${day}`].checked = form.elements['open-1'].checked; form.elements[h`start-${day}`].value = form.elements['start-1'].value; form.elements[h`end-${day}`].value = form.elements['end-1'].value; for (const part of ['start','end']) form.elements[`${part}-${day}`].setCustomValidity(''); } recordAdminDraft(form); toast(h('Monday copied to Tuesday–Friday. Save working hours to apply.')); }
   if (['admin-decline-open','admin-cancel-open','admin-complete-open'].includes(a)) {
     const b = state.admin.bookings.find(b => b.id === button.dataset.id);
     const value = a === 'admin-decline-open' ? 'decline' : a === 'admin-cancel-open' ? 'cancel' : 'complete';
@@ -450,10 +523,12 @@ document.addEventListener('click', async event => {
   if (button.dataset.busy) return;
   button.dataset.busy = 'true'; button.setAttribute('aria-busy', 'true');
   try { await action(button); }
-  catch (error) { const field = $('#modal').open ? $('#modal-error') : $('#form-error'); if (field) field.textContent = t(error.message); toast(error.message); }
+  catch (error) { const field = $('#modal').open ? $('#modal-error') : $('#form-error'); showFormError(field,error.message); }
   finally { delete button.dataset.busy; button.removeAttribute('aria-busy'); }
 });
 document.addEventListener('change', async event => {
+  event.target.setCustomValidity?.('');
+  recordAdminDraft(event.target.form);
   try {
     if (event.target.id === 'language-select') {
       const fields = [...document.querySelectorAll('#main input, #main textarea, #main select')].map(el => ({name:el.name,id:el.id,value:el.value,checked:el.checked}));
@@ -462,33 +537,50 @@ document.addEventListener('change', async event => {
       for (const field of fields) { const el = field.id ? document.getElementById(field.id) : document.querySelector(`#main [name="${CSS.escape(field.name)}"]`); if (el) { el.value = field.value; if ('checked' in el) el.checked = field.checked; } }
       $('#language-select').focus({preventScroll:true});
     }
-    if (event.target.id === 'reserve-client') { const guest = $('#reserve-guest'); guest.hidden = Boolean(event.target.value); guest.disabled = Boolean(event.target.value); }
+    if (event.target.id === 'admin-view-select') await setAdminView(event.target.value);
+    if (event.target.id === 'admin-section') await navigate(adminPath(event.target.value));
+    if (event.target.name === 'clientMode') { const existing = event.target.value === 'existing'; $('#reserve-existing').hidden = !existing; $('#reserve-existing').disabled = !existing; $('#reserve-guest').hidden = existing; $('#reserve-guest').disabled = existing; $(existing ? '#reserve-client-search' : '#reserve-guest input').focus(); }
     if (['reserve-service', 'reserve-date'].includes(event.target.id)) await loadReserveSlots();
-    if (event.target.id === 'reserve-time') $('button[type="submit"]', event.target.form).disabled = !event.target.value;
+    if (event.target.id === 'reserve-time') updateReserveSummary();
     if (event.target.id === 'date-picker') { const date = event.target.value; if (date < state.today || date > dayAfter(state.today, 90)) throw new Error(h('Choose a date within the next 90 days.')); state.date = date; state.slot = null; await loadSlots(); render(); }
     if (event.target.id === 'repeat-weeks') { state.repeatWeeks = Number(event.target.value); render({selectionOnly:true}); $('#repeat-weeks').focus({preventScroll:true}); }
-    if (event.target.id === 'admin-date') { state.adminBookingId = null; state.adminDate = event.target.value; $('#admin-results').innerHTML = adminResults(); }
+    if (event.target.id === 'admin-date') { clearBookingLink(); state.adminDate = event.target.value; state.adminFilter = 'all'; updateAdminFilters(); }
   } catch (error) { toast(error.message); }
 });
 document.addEventListener('invalid', event => { const el = event.target; if (getLanguage() === 'sq' && el.setCustomValidity) el.setCustomValidity(t(el.validity.valueMissing ? 'Complete this field.' : el.type === 'email' ? 'Enter a valid email address.' : 'Check this value and try again.')); }, true);
-document.addEventListener('input', event => { event.target.setCustomValidity?.(''); if (event.target.form?.id === 'details-form' && ['name', 'phone'].includes(event.target.name)) state.detailsDraft = {...state.detailsDraft, [event.target.name]:event.target.value}; if (event.target.name === 'notes' && event.target.form?.id === 'details-form') state.notes = event.target.value; if (event.target.id === 'admin-search') { state.adminBookingId = null; state.adminQuery = event.target.value; $('#admin-results').innerHTML = adminResults(); } });
+document.addEventListener('input', event => {
+  event.target.setCustomValidity?.(''); recordAdminDraft(event.target.form);
+  if (event.target.form?.id === 'details-form' && ['name', 'phone'].includes(event.target.name)) state.detailsDraft = {...state.detailsDraft, [event.target.name]:event.target.value};
+  if (event.target.name === 'notes' && event.target.form?.id === 'details-form') state.notes = event.target.value;
+  if (event.target.id === 'admin-search') { clearBookingLink(); state.adminQuery = event.target.value; if (state.adminQuery.trim() && state.adminFilter === 'today' && !state.adminDate) state.adminFilter = 'all'; updateAdminFilters(); }
+  if (event.target.id === 'reserve-client-search') {
+    const select = $('#reserve-client'), selected = select.value;
+    const clients = event.target.form.clients.filter(u => matchesClient(u,event.target.value));
+    select.innerHTML = h('<option value="">Choose a client</option>') + clientOptions(clients);
+    if (clients.some(u => u.id === selected)) select.value = selected;
+    $('#reserve-client-status').textContent = clients.length ? t('Choose a client from the results below.') : t('No matching clients. Try another search or use Guest / new client.');
+  }
+});
 document.addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.target, submit = $('button[type="submit"], button.button-primary', form);
   if (submit?.disabled || form.dataset.submitting) return;
   form.dataset.submitting = 'true';
   if (submit) { submit.disabled = true; submit.setAttribute('aria-busy', 'true'); }
-  const data = Object.fromEntries(new FormData(form));
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData);
+  const lockedControls = state.route === 'admin' ? [...form.elements].filter(el => !el.disabled) : [];
+  lockedControls.forEach(el => { el.disabled = true; });
   const errorField = $('.form-error', form); if (errorField) errorField.textContent = '';
   try {
-    if (form.id === 'auth-form') { const result = await api(h`/auth/${state.authMode}`, 'POST', data); state.user = result.user; state.detailsDraft = null; state.devCode = result.devCode; if (result.emailError) toast(result.emailError); await afterAuth(); }
+    if (form.id === 'auth-form') { const result = await api(h`/auth/${state.authMode}`, 'POST', data); state.user = result.user; adminDrafts.clear(); state.detailsDraft = null; state.devCode = result.devCode; if (result.emailError) toast(result.emailError); await afterAuth(); }
     if (form.id === 'verify-form') { const result = await api('/auth/verify', 'POST', data); state.user = result.user; state.devCode = null; await afterAuth(); toast(h('Email verified. You’re ready to book.')); }
     if (form.id === 'details-form') { state.user = (await api('/profile', 'PATCH', data)).user; state.notes = data.notes; state.detailsDraft = null; state.step = 3; render(); focusBookingStep(); }
     if (form.id === 'hours-form' || form.id === 'rules-form') {
       const s = structuredClone(state.admin.settings);
-      if (form.id === 'hours-form') { s.allowOutside = data.allowOutside === 'on'; s.outsideStart = data.outsideStart; s.outsideEnd = data.outsideEnd; s.shifts = s.shifts.map(d => ({ day: d.day, open: data[h`open-${d.day}`] === 'on', start: data[h`start-${d.day}`], end: data[h`end-${d.day}`] })); }
+      if (form.id === 'hours-form') { s.allowOutside = data.allowOutside === 'on'; s.outsideStart = form.elements.outsideStart.value; s.outsideEnd = form.elements.outsideEnd.value; s.shifts = s.shifts.map(d => ({ day: d.day, open: data[h`open-${d.day}`] === 'on', start: form.elements[h`start-${d.day}`].value, end: form.elements[h`end-${d.day}`].value })); }
       else { s.autoApprove = data.autoApprove === 'on'; s.outsideApproval = data.outsideApproval === 'on'; s.requiredApprovals = Number(data.requiredApprovals); }
-      state.settings = (await api('/admin/settings', 'PUT', s)).settings; await route(); toast(h('Your settings have been saved.'));
+      state.settings = (await api('/admin/settings', 'PUT', s)).settings; adminDrafts.delete(form.id); await route(); toast(h('Your settings have been saved.'));
     }
     if (form.id === 'admin-reserve-form') {
       const slot = form.slots?.find(s => s.time === data.time);
@@ -500,17 +592,18 @@ document.addEventListener('submit', async event => {
       await navigate('/admin'); toast(h('Reservation confirmed.'));
     }
     if (form.id === 'notification-settings-form') {
-      state.admin.notificationSettings = await api('/admin/notification-settings', 'PUT', {recipientIds:new FormData(form).getAll('recipientIds'),language:data.language});
-      render(); toast(h('Email notification settings saved.'));
+      state.admin.notificationSettings = await api('/admin/notification-settings', 'PUT', {recipientIds:formData.getAll('recipientIds'),language:data.language});
+      adminDrafts.delete(form.id); render(); toast(h('Email notification settings saved.'));
     }
     if (form.id === 'service-form') { await api(h`/admin/services${data.serviceId ? h`/${data.serviceId}` : ''}`, data.serviceId ? 'PUT' : 'POST', {...data, duration: Number(data.duration), price: Math.round(Number(data.price) * 100), outside_price: Math.round(Number(data.outside_price) * 100)}); closeModal(); await route(); toast(h('Service saved.')); }
-    if (form.id === 'vacation-form') { await api('/admin/vacations', 'POST', data); await route(); toast(h('Time off added. These dates are closed for bookings.')); }
-    if (form.id === 'team-form') { await api('/admin/team', 'PUT', {email: data.email, role: 'admin'}); await route(); toast(h('Administrator access granted. They can sign in again now.')); }
+    if (form.id === 'vacation-form') { await api('/admin/vacations', 'POST', data); adminDrafts.delete(form.id); await route(); toast(h('Time off added. These dates are closed for bookings.')); }
+    if (form.id === 'team-form') { await api('/admin/team', 'PUT', {email: data.email, role: 'admin'}); adminDrafts.delete(form.id); await route(); toast(h('Administrator access granted. They can sign in again now.')); }
     if (form.id === 'prices-form') { state.services = (await api('/admin/prices', 'PUT', { services: state.admin.services.map(s => ({ id: s.id, price: Math.round(Number(data[h`price-${s.id}`]) * 100), outside_price: Math.round(Number(data[h`outside-${s.id}`]) * 100) })) })).services; await route(); toast(h('Your prices have been saved.')); }
-  } catch (error) { const current = $('#modal').open ? $('#modal-error') : $('#form-error'); if (current) current.textContent = t(error.message); else toast(error.message); }
-  finally { delete form.dataset.submitting; if (submit) { submit.disabled = form.id === 'admin-reserve-form' && !form.elements.time.value; submit.removeAttribute('aria-busy'); } }
+  } catch (error) { const current = $('#modal').open ? $('#modal-error') : $('#form-error'); showFormError(current,error.message); }
+  finally { delete form.dataset.submitting; lockedControls.forEach(el => { el.disabled = false; }); if (draftForms.has(form.id)) syncAdminForm(form); if (submit) { submit.disabled = form.id === 'admin-reserve-form' && !form.elements.time.value; submit.removeAttribute('aria-busy'); } if (form.id === 'admin-reserve-form' && form.isConnected) { form.elements.time.disabled = !form.slots?.length; updateReserveSummary(); } }
 });
-$('#modal').addEventListener('click', event => { if (event.target === $('#modal')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) closeModal(); } });
+$('#modal').addEventListener('click', event => { if (event.target === $('#modal') && !$('#modal form[data-submitting]')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) closeModal(); } });
+$('#modal').addEventListener('cancel', event => { if ($('#modal form[data-submitting]')) event.preventDefault(); });
 window.addEventListener('popstate', () => { migrateHash(); route().catch(e => toast(e.message)); });
 window.addEventListener('hashchange', () => { if (migrateHash()) route().catch(e => toast(e.message)); });
 migrateHash();
