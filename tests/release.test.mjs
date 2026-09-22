@@ -122,6 +122,7 @@ test('only main pushes and manual main runs can publish/deploy; production runs 
   assert.match(workflow,/deploy:\n[^]*needs: publish/);
   assert.match(workflow,/name: production/);
   assert.match(workflow,/group: salon-production\n\s+cancel-in-progress: false/);
-  assert.match(workflow,/secrets\.SALON_KUBECONFIG/);
-  assert.match(workflow,/if: always\(\)/);
+  assert.doesNotMatch(workflow,/SALON_KUBECONFIG/);
+  assert.match(workflow,/node scripts\/gitops\.mjs/);
+  assert.match(workflow,/contents: write/);
 });

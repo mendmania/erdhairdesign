@@ -25,6 +25,7 @@ jobs:
     needs: test
     outputs:
       image: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+      deployer: ${{ steps.image.outputs.name }}@${{ steps.deployer.outputs.digest }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -49,6 +50,7 @@ jobs:
         with:
           context: .
           target: runtime
+          build-args: SOURCE_REVISION=${{ github.sha }}
           platforms: linux/amd64
           push: true
           tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
@@ -57,13 +59,27 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           provenance: mode=min
           sbom: true
-      - name: Record immutable deployment image
+      - name: Download and verify the deployment client
         env:
-          IMAGE: ${{ steps.image.outputs.name }}
-          DIGEST: ${{ steps.build.outputs.digest }}
+          KUBECTL_VERSION: v1.35.7
         run: |
-          echo 'Use this immutable image with scripts/deploy.mjs:' >> "$GITHUB_STEP_SUMMARY"
-          echo "\`$IMAGE@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p .runtime/ci
+          cd .runtime/ci
+          curl --fail --silent --show-error --location --retry 3 -o kubectl "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl"
+          curl --fail --silent --show-error --location --retry 3 -o kubectl.sha256 "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl.sha256"
+          printf '%s  kubectl\n' "$(cat kubectl.sha256)" | sha256sum --check
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        id: deployer
+        with:
+          context: .
+          target: deployer
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:deployer-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=min
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -77,7 +93,7 @@ jobs:
       group: salon-production
       cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -97,46 +113,16 @@ jobs:
             echo 'A newer main commit exists; this release was skipped.' >> "$GITHUB_STEP_SUMMARY"
             echo 'deploy=false' >> "$GITHUB_OUTPUT"
           fi
-      - name: Load the salon deployment credential
-        if: steps.current.outputs.deploy == 'true'
-        env:
-          SALON_KUBECONFIG: ${{ secrets.SALON_KUBECONFIG }}
-        run: |
-          if [ -z "$SALON_KUBECONFIG" ]; then
-            echo '::error::Production setup is incomplete. Run scripts/setup-ci.mjs from a machine that can reach the salon Kubernetes API.'
-            exit 1
-          fi
-          umask 077
-          printf '%s' "$SALON_KUBECONFIG" > "$RUNNER_TEMP/salon-kubeconfig.json"
-      - name: Install a verified Kubernetes client
-        if: steps.current.outputs.deploy == 'true'
-        env:
-          KUBECTL_VERSION: v1.35.7
-        run: |
-          cd "$RUNNER_TEMP"
-          curl --fail --silent --show-error --location --retry 3 -o kubectl "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl"
-          curl --fail --silent --show-error --location --retry 3 -o kubectl.sha256 "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl.sha256"
-          printf '%s  kubectl\n' "$(cat kubectl.sha256)" | sha256sum --check
-          mkdir -p "$RUNNER_TEMP/salon-tools"
-          install -m 0755 kubectl "$RUNNER_TEMP/salon-tools/kubectl"
-          echo "$RUNNER_TEMP/salon-tools" >> "$GITHUB_PATH"
-      - name: Check production API connectivity
-        if: steps.current.outputs.deploy == 'true'
-        run: kubectl --kubeconfig "$RUNNER_TEMP/salon-kubeconfig.json" --request-timeout=10s get --raw=/readyz
-      - name: Back up, deploy and verify production
+      - name: Request a cluster release and verify production
         if: steps.current.outputs.deploy == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_IMAGE: ${{ needs.publish.outputs.image }}
+          DEPLOYER_IMAGE: ${{ needs.publish.outputs.deployer }}
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_RUN: ${{ github.run_id }}
           RELEASE_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          node scripts/release.mjs --kubeconfig "$RUNNER_TEMP/salon-kubeconfig.json" \
-            --image "$RELEASE_IMAGE" --revision "$RELEASE_SHA" \
-            --run-id "$RELEASE_RUN" --attempt "$RELEASE_ATTEMPT" > "$RUNNER_TEMP/salon-release.json"
-          echo 'Production verified at https://tregubio.com' >> "$GITHUB_STEP_SUMMARY"
-          cat "$RUNNER_TEMP/salon-release.json" >> "$GITHUB_STEP_SUMMARY"
-      - name: Remove the temporary credential
-        if: always()
-        run: rm -f "$RUNNER_TEMP/salon-kubeconfig.json"
+          set -o pipefail
+          node scripts/gitops.mjs | tee "$RUNNER_TEMP/salon-release.txt"
+          cat "$RUNNER_TEMP/salon-release.txt" >> "$GITHUB_STEP_SUMMARY"

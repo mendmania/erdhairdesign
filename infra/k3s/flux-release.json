@@ -1,0 +1,206 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "name": "salon-release-reconciler",
+        "namespace": "flux-system",
+        "labels": {
+          "app.kubernetes.io/part-of": "erdhairdesign"
+        }
+      },
+      "automountServiceAccountToken": false
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "Role",
+      "metadata": {
+        "name": "salon-release-reconciler",
+        "namespace": "erdhairdesign",
+        "labels": {
+          "app.kubernetes.io/part-of": "erdhairdesign"
+        }
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            "batch"
+          ],
+          "resources": [
+            "jobs"
+          ],
+          "verbs": [
+            "get",
+            "list",
+            "watch",
+            "create",
+            "patch",
+            "delete"
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "RoleBinding",
+      "metadata": {
+        "name": "salon-release-reconciler",
+        "namespace": "erdhairdesign",
+        "labels": {
+          "app.kubernetes.io/part-of": "erdhairdesign"
+        }
+      },
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "salon-release-reconciler",
+          "namespace": "flux-system"
+        }
+      ],
+      "roleRef": {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": "salon-release-reconciler"
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "salon-release",
+        "namespace": "erdhairdesign",
+        "labels": {
+          "app.kubernetes.io/part-of": "erdhairdesign"
+        }
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {
+            "app.kubernetes.io/name": "salon-release"
+          }
+        },
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "egress": [
+          {
+            "to": [
+              {
+                "ipBlock": {
+                  "cidr": "159.195.30.113/32"
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "TCP",
+                "port": 6443
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system"
+                  }
+                },
+                "podSelector": {
+                  "matchLabels": {
+                    "k8s-app": "kube-dns"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "UDP",
+                "port": 53
+              },
+              {
+                "protocol": "TCP",
+                "port": 53
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "ipBlock": {
+                  "cidr": "0.0.0.0/0",
+                  "except": [
+                    "0.0.0.0/8",
+                    "10.0.0.0/8",
+                    "100.64.0.0/10",
+                    "127.0.0.0/8",
+                    "169.254.0.0/16",
+                    "172.16.0.0/12",
+                    "192.168.0.0/16",
+                    "224.0.0.0/4",
+                    "240.0.0.0/4"
+                  ]
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "TCP",
+                "port": 443
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "source.toolkit.fluxcd.io/v1",
+      "kind": "GitRepository",
+      "metadata": {
+        "name": "erdhairdesign-releases",
+        "namespace": "flux-system",
+        "labels": {
+          "app.kubernetes.io/part-of": "erdhairdesign"
+        }
+      },
+      "spec": {
+        "interval": "1m",
+        "url": "https://github.com/mendmania/erdhairdesign",
+        "ref": {
+          "branch": "salon-production"
+        },
+        "timeout": "30s"
+      }
+    },
+    {
+      "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+      "kind": "Kustomization",
+      "metadata": {
+        "name": "erdhairdesign-releases",
+        "namespace": "flux-system",
+        "labels": {
+          "app.kubernetes.io/part-of": "erdhairdesign"
+        }
+      },
+      "spec": {
+        "interval": "1m",
+        "retryInterval": "1m",
+        "path": "./",
+        "prune": true,
+        "deletionPolicy": "Orphan",
+        "wait": true,
+        "timeout": "9m",
+        "serviceAccountName": "salon-release-reconciler",
+        "targetNamespace": "erdhairdesign",
+        "sourceRef": {
+          "kind": "GitRepository",
+          "name": "erdhairdesign-releases"
+        }
+      }
+    }
+  ]
+}

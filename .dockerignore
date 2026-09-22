@@ -19,3 +19,10 @@
 !.github/workflows/container.yml
 !tests/
 !tests/**
+
+!scripts/gitops.mjs
+!scripts/cluster-release.mjs
+!.runtime/
+!.runtime/ci/
+!.runtime/ci/kubectl
+!infra/k3s/flux-release.json

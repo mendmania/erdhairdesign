@@ -12,31 +12,41 @@ The selected temporary salon hostname is **tregubio.com** (managed in Cloudflare
 
 ## Automatic production releases
 
-The `Test, publish and deploy salon` workflow now runs tests, publishes an immutable AMD64 image, and upgrades **only the existing salon deployment** after every push to `main`. Pull requests only test/build. **Run workflow** on `main` can retry a release. Publishing an image alone is not a successful deployment: the production job must also pass.
+Every push to `main` runs tests, publishes immutable AMD64 runtime and deployment images, and writes a release Job to the generated `salon-production` branch. Pull requests only test/build. The existing Flux controllers pull that branch every minute and run the Job **inside the cluster**. GitHub-hosted runners cannot reach this server's Kubernetes API; they no longer need that connection or a Kubernetes credential.
 
-One-time activation (run from an owner machine that can reach the verified Kubernetes API):
+Activate once from an owner machine with verified cluster access, Node 22.16+, kubectl and authenticated `gh`:
 
 ```sh
 node scripts/setup-ci.mjs --kubeconfig /path/to/netcup-k3s-admin-direct.yaml
 ```
 
-The setup verifies the cluster and existing salon, creates the scoped identity defined in `github-deployer.json`, and stores **only that identity** as `SALON_KUBECONFIG` in this repository's **production** environment. The owner kubeconfig is never uploaded. The environment is limited to the `main` branch; existing environment protections are preserved. No GitHub approval gate is added. Both an authenticated `gh` CLI with repository administration access and the owner kubeconfig are needed for this one-time operation.
+Setup validates the existing salon and Flux controllers, preserves the GitHub production environment's main-only restriction and existing protections, and applies the owned resources in `github-deployer.json` and `flux-release.json`. It never uploads the owner kubeconfig. The source may briefly report the generated branch missing before the first workflow publishes it.
 
-The deployment identity can get/watch/patch the named salon Deployment, inspect salon-namespace pods, and execute the database-backup and health-check commands there. It cannot read Kubernetes Secret objects, change RBAC, delete storage, or manage the shared edge or other namespaces. Deployment/exec access is still production access: restrict who can push or merge workflow changes to `main`. This external runner uses a dedicated persistent service-account token, which can be revoked by deleting the token Secret printed by setup. Rotate it by rerunning setup, confirming a successful deployment, and then deleting the old token Secret. [Kubernetes documents this token mechanism and recommends short-lived tokens where supported](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/); this setup does not change the shared API server to add an OIDC provider.
+Flux impersonates a dedicated service account that can manage only Jobs in the salon namespace. Each Job runs non-root with a read-only filesystem and a short-lived projected `github-deployer` token. That identity can patch only the named salon Deployment and inspect/exec salon-namespace pods. It cannot read Secret objects, change RBAC, delete storage, or manage another namespace. Deployment/exec privileges still provide production access: restrict who can merge workflow changes to `main` and write the generated release branch. No general-purpose self-hosted runner is installed.
 
-GitHub-hosted runners must be able to reach the verified API at `https://159.195.30.113:6443`. If the endpoint is accessible only through a private network, arrange an approved runner/network connection before enabling deployment; do not disable TLS verification. The deployment job fails explicitly if its credential is missing. **As of this change, the saved API address timed out from the development machine and the saved SSH identity was rejected, so live credential provisioning and a production rollout could not be verified.** Run setup once access is restored, then re-run the latest `main` workflow.
+Each release:
 
-Each upgrade:
+1. Rejects superseded `main` commits, wrong clusters, unhealthy starting deployments, unexpected containers, or changed storage.
+2. Server-dry-runs the image/revision patch while preserving live settings and storage.
+3. Uses SQLite's online backup API inside the healthy salon pod, verifies integrity, and writes an owner-only snapshot at `/data/backups/release-COMMIT-RUN-ATTEMPT.sqlite`. Failure prevents the upgrade.
+4. Rechecks the latest main and current deployment, then applies a resource-version-guarded patch and waits for rollout/internal health checks.
+5. Verifies public assets and bootstrap. GitHub independently waits for `/api/version` to equal the requested commit and verifies the exact `/app.js` and `/api/bootstrap` before reporting success.
 
-1. Rejects stale `main` commits, wrong clusters, unhealthy starting deployments, unexpected containers, or changed storage.
-2. Server-dry-runs an update to the image and source-revision annotation, preserving all other live configuration.
-3. Uses SQLite's online backup API inside the running salon pod, validates the snapshot, and saves it privately at `/data/backups/release-COMMIT-RUN-ATTEMPT.sqlite` with owner-only permissions. A backup failure prevents the upgrade.
-4. Rechecks the latest source and current deployment before applying a resource-version-guarded patch. Production jobs are serialized and an in-progress deployment is not cancelled by a newer push.
-5. Waits for rollout and internal health checks, then compares the public `/app.js` with the exact checkout and checks `/api/bootstrap` at `https://tregubio.com`.
+The production environment and workflow concurrency serialize requests. Jobs never retry automatically, have an eight-minute deadline, and do not automatically roll back images or restore data. Re-run the latest workflow to create a new attempt. Flux prunes the previous release Job when the next request arrives; it never owns/prunes the app or PVC. Completed Jobs are retained until the next request so Flux does not recreate them. Removing the Flux Kustomization orphans its Job.
 
-There is a short salon interruption with the existing single-instance Recreate strategy. No edge/DNS changes, Secret changes, automatic image rollback, or automatic database restoration happen during release. The workflow summary records the deployed and previous image digests plus the backup path. Snapshots remain on the current PVC; they are not off-node disaster recovery and are never uploaded as public workflow artifacts. Monitor disk usage and archive/prune reviewed old snapshots as part of the backup routine.
+There is a short salon interruption with the single-instance Recreate strategy. Backups remain on the existing PVC, are never uploaded to GitHub, and are not off-node disaster recovery. Monitor disk usage and archive reviewed snapshots.
 
-The main-branch environment restriction follows [GitHub's deployment-environment controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+Troubleshooting (explicit owner kubeconfig):
+
+```sh
+kubectl --kubeconfig /path/to/owner-kubeconfig -n flux-system get gitrepository,kustomization erdhairdesign-releases
+kubectl --kubeconfig /path/to/owner-kubeconfig -n erdhairdesign get jobs -l app.kubernetes.io/part-of=erdhairdesign
+kubectl --kubeconfig /path/to/owner-kubeconfig -n erdhairdesign logs job/salon-release-RUN-ATTEMPT
+```
+
+After the first successful pull deployment, remove the obsolete GitHub production `SALON_KUBECONFIG` secret and revoke its old `github-deployer-token-*` Secret. Projected Job tokens replace these persistent credentials. Do not remove the `github-deployer` ServiceAccount/Role/RoleBinding, which the Jobs still use.
+
+This follows Flux's [Job reconciliation](https://fluxcd.io/flux/use-cases/running-jobs/) and [scoped Kustomization service accounts](https://fluxcd.io/flux/components/kustomize/kustomizations/), with Kubernetes [projected service-account credentials](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/).
 
 ## Repeatable deployment commands
 
