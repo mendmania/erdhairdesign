@@ -279,3 +279,26 @@ test('release identity is public, exact and never cached', async t => {
   const unknown = await fixture(t, { revision: 'invalid-value', release: 'invalid' });
   assert.deepEqual((await unknown.request('/api/version')).body, { revision: null, release: null });
 });
+
+
+test('other admins cannot see the protected owner in account lists, even before owner verification', async t => {
+  const { db, request } = await fixture(t);
+  const { createSession } = await import('../lib/auth.mjs');
+  db.exec(`INSERT INTO users (id,email,name,password,verified,role,created_at) VALUES
+    ('owner','MendMania@gmail.com','Owner','unused',0,'client',0),
+    ('staff','staff@example.test','Barber','unused',1,'admin',0),
+    ('customer','customer@example.test','Customer','unused',1,'client',0)`);
+  const call = (id, path) => request(path, 'GET', undefined, { Cookie: `erd_session=${createSession(db, id)}` });
+  for (const verified of [0, 1]) {
+    if (verified) db.prepare('UPDATE users SET verified=1 WHERE id=?').run('owner');
+    const clients = await call('staff', '/api/admin/clients');
+    assert.equal(clients.status, 200);
+    assert.deepEqual(clients.body.clients.map(client => client.id).sort(), ['customer', 'staff']);
+    assert.ok(!JSON.stringify(clients.body).toLowerCase().includes('mendmania@gmail.com'));
+    assert.equal((await call('staff', '/api/admin/dashboard')).body.admins, undefined);
+    assert.equal((await call('staff', '/api/admin/notification-settings')).status, 403);
+  }
+  assert.equal(db.prepare('SELECT role FROM users WHERE id=?').get('owner').role, 'super_admin');
+  assert.deepEqual((await call('owner', '/api/admin/clients')).body.clients.map(client => client.id).sort(), ['customer', 'owner', 'staff']);
+  assert.ok((await call('owner', '/api/admin/dashboard')).body.admins.some(admin => admin.id === 'owner'));
+});

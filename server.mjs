@@ -1,6 +1,6 @@
 import { createNotificationWorker, notificationInbox, markNotificationsRead, notificationPreferences, saveNotificationPreferences, retryNotificationEmails } from './lib/notifications.mjs';
 import { pagePath } from './public/routes.js';
-import { isAdmin, isSuperAdmin } from './lib/roles.mjs';
+import { OWNER_EMAIL, isAdmin, isSuperAdmin } from './lib/roles.mjs';
 import { setAdmin, addVacation, saveService, removeService } from './lib/admin.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -132,7 +132,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       if (route === 'GET /api/admin/notification-settings') return json({...notificationPreferences(db, user), emailConfigured: Boolean(apiKey && from)});
       if (route === 'PUT /api/admin/notification-settings') return json({...saveNotificationPreferences(db, user, input), emailConfigured: Boolean(apiKey && from)});
       if (route === 'POST /api/admin/notification-settings/retry') return json({...retryNotificationEmails(db, user), emailConfigured: Boolean(apiKey && from)});
-      if (route === 'GET /api/admin/clients') return json({ clients: db.prepare('SELECT id,name,email,phone FROM users ORDER BY name,email').all() });
+      if (route === 'GET /api/admin/clients') return json({ clients: db.prepare("SELECT id,name,email,phone FROM users WHERE ? = 1 OR (role != 'super_admin' AND lower(email) != ?) ORDER BY name,email").all(Number(isSuperAdmin(user)), OWNER_EMAIL) });
       if (route === 'POST /api/admin/bookings') return json({ booking: createAdminBooking(db, user, input) }, 201);
       if (route === 'GET /api/admin/dashboard') {
         return json({ bookings: db.prepare("SELECT b.*, COALESCE(u.name,b.guest_name) AS name, COALESCE(u.email,'') AS email, COALESCE(u.phone,b.guest_phone) AS phone, COALESCE(u.approvals,0) AS approvals FROM bookings b LEFT JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC").all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services WHERE active = 1').all(), vacations: db.prepare('SELECT * FROM vacations ORDER BY start_date').all(), ...(isSuperAdmin(user) ? { admins: db.prepare("SELECT id,name,email,role FROM users WHERE role IN ('admin','super_admin') ORDER BY role DESC,name").all() } : {}) });

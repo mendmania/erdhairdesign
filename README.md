@@ -26,7 +26,7 @@ UI translations are in `public/locales/sq.js`. The `h` template helper translate
 
 ## Your admin account
 
-The verified account **mendmania@gmail.com** is the protected super admin. Existing verified accounts with that email are promoted automatically on startup; a new account must verify its email before receiving this role. Refresh after deployment, sign in, and open **Salon admin** in the footer or [the admin workspace](https://tregubio.com/admin).
+The verified account **mendmania@gmail.com** is the protected super admin. Other admins cannot see this account in the registered-client list; administrator and notification-recipient lists are visible only to the super admin. Existing verified accounts with that email are promoted automatically on startup; a new account must verify its email before receiving this role. Refresh after deployment, sign in, and open **Salon admin** in the footer or [the admin workspace](https://tregubio.com/admin).
 
 Only the super admin sees **Administrators** and can grant or revoke admin access for other registered, verified users. Access changes invalidate that person's existing sessions; they sign in again to use their new role. The owner cannot be removed, demoted, or have its identity changed through the application. SQLite triggers also reject ordinary deletion/demotion queries. These protections do not supersede an infrastructure operator who can replace code or alter the database schema.
 
