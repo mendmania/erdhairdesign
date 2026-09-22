@@ -12,7 +12,7 @@ import { AppError, demand, availability, createBooking, createAdminBooking, chan
 import { register, passwordMatches, passwordHash, sessionUser, publicUser, createSession, sendVerification, verifyEmail, validateDetails, hash } from './lib/auth.mjs';
 
 const root = fileURLToPath(new URL('./public/', import.meta.url));
-export function createApp({ db = openStore(), production = process.env.NODE_ENV === 'production', appUrl = process.env.APP_URL || 'http://localhost:3000', apiKey = process.env.BREVO_API_KEY, from = process.env.EMAIL_FROM, trustProxy = process.env.TRUST_PROXY === 'true', revision = process.env.APP_REVISION } = {}) {
+export function createApp({ db = openStore(), production = process.env.NODE_ENV === 'production', appUrl = process.env.APP_URL || 'http://localhost:3000', apiKey = process.env.BREVO_API_KEY, from = process.env.EMAIL_FROM, trustProxy = process.env.TRUST_PROXY === 'true', revision = process.env.APP_REVISION, release = process.env.APP_RELEASE } = {}) {
   if (production && (!apiKey || !from || !appUrl.startsWith('https://'))) throw new Error('Production requires BREVO_API_KEY, EMAIL_FROM, and an HTTPS APP_URL.');
   const dummyPassword = passwordHash('dummy-password-never-used');
   const limits = new Map();
@@ -81,7 +81,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       const user = sessionUser(db, req);
       const requireUser = () => demand(user, 'Please sign in to continue.', 401);
       const route = `${req.method} ${url.pathname}`;
-      if (route === 'GET /api/version') return json({ revision: /^[a-f0-9]{40}$/.test(revision || '') ? revision : null });
+      if (route === 'GET /api/version') return json({ revision: /^[a-f0-9]{40}$/.test(revision || '') ? revision : null, release: /^[0-9]{1,20}-[0-9]{1,5}$/.test(release || '') ? release : null });
       if (route === 'GET /api/bootstrap') {
         const settings = settingsFor(db);
         return json({ services: db.prepare('SELECT * FROM services WHERE active = 1').all(), settings, user: publicUser(user), today: localDate(Date.now(), settings.timezone), development: !production && !apiKey });

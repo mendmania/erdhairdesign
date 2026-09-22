@@ -6,7 +6,8 @@ COPY --chown=node:node public/ ./public/
 COPY --chown=node:node scripts/admin.mjs ./scripts/admin.mjs
 RUN mkdir -p /data && chown node:node /data
 ARG SOURCE_REVISION=unknown
-ENV APP_REVISION=$SOURCE_REVISION
+ARG SOURCE_RELEASE=unknown
+ENV APP_REVISION=$SOURCE_REVISION APP_RELEASE=$SOURCE_RELEASE
 USER 1000:1000
 
 FROM base AS test

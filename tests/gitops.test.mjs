@@ -46,9 +46,10 @@ test('cluster freshness fails closed on stale main or unavailable GitHub', async
   await assert.rejects(assertMain(options.revision, async () => new Response('', { status: 403 })));
 });
 test('production verification rejects a healthy site running the wrong revision', async () => {
-  await verifyRevision(options.revision, async () => Response.json({ revision: options.revision }));
-  await assert.rejects(verifyRevision(options.revision, async () => Response.json({ revision: 'old' })));
-  await assert.rejects(verifyRevision(options.revision, async () => new Response('', { status: 404 })));
+  await verifyRevision(options.revision, '123-2', async () => Response.json({ revision: options.revision, release: '123-2' }));
+  await assert.rejects(verifyRevision(options.revision, '123-2', async () => Response.json({ revision: 'old' })));
+  await assert.rejects(verifyRevision(options.revision, '123-2', async () => Response.json({ revision: options.revision, release: '123-1' })));
+  await assert.rejects(verifyRevision(options.revision, '123-2', async () => new Response('', { status: 404 })));
 });
 test('Flux may manage salon release Jobs only and does not own the app or storage', () => {
   const items = JSON.parse(readFileSync(new URL('../infra/k3s/flux-release.json', import.meta.url))).items;

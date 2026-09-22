@@ -50,7 +50,9 @@ jobs:
         with:
           context: .
           target: runtime
-          build-args: SOURCE_REVISION=${{ github.sha }}
+          build-args: |
+            SOURCE_REVISION=${{ github.sha }}
+            SOURCE_RELEASE=${{ github.run_id }}-${{ github.run_attempt }}
           platforms: linux/amd64
           push: true
           tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}

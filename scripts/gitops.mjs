@@ -28,9 +28,11 @@ export function releaseJob({ image, deployerImage, revision, runId, attempt }) {
   } } };
 }
 
-export async function verifyRevision(revision, fetcher = fetch) {
+export async function verifyRevision(revision, release, fetcher = fetch) {
   const response = await fetcher(`https://tregubio.com/api/version?release=${revision}`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
-  assert(response.ok && (await response.json()).revision === revision, 'Production has not activated this revision yet.');
+  assert(response.ok, 'Production release identity is unavailable.');
+  const actual = await response.json();
+  assert(actual.revision === revision && actual.release === release, 'Production has not activated this release attempt yet.');
 }
 
 export async function publishRequest(options, api) {
@@ -65,7 +67,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     let lastError;
     while (Date.now() < deadline) {
       try {
-        await verifyRevision(options.revision);
+        await verifyRevision(options.revision, `${options.runId}-${options.attempt}`);
         await verifyPublicRelease({ revision: options.revision, appJs: readFileSync(new URL('../public/app.js', import.meta.url)) });
         console.log(`Production verified: https://tregubio.com (${options.revision})`);
         process.exit(0);

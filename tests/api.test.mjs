@@ -271,11 +271,11 @@ test('only the super admin can configure booking email recipients while every ad
 
 test('release identity is public, exact and never cached', async t => {
   const revision = 'a'.repeat(40);
-  const { request } = await fixture(t, { revision });
+  const { request } = await fixture(t, { revision, release: '123-2' });
   const result = await request('/api/version');
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body, { revision });
+  assert.deepEqual(result.body, { revision, release: '123-2' });
   assert.equal(result.headers.get('cache-control'), 'no-store');
-  const unknown = await fixture(t, { revision: 'invalid-value' });
-  assert.deepEqual((await unknown.request('/api/version')).body, { revision: null });
+  const unknown = await fixture(t, { revision: 'invalid-value', release: 'invalid' });
+  assert.deepEqual((await unknown.request('/api/version')).body, { revision: null, release: null });
 });

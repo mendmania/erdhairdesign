@@ -30,7 +30,7 @@ Each release:
 2. Server-dry-runs the image/revision patch while preserving live settings and storage.
 3. Uses SQLite's online backup API inside the healthy salon pod, verifies integrity, and writes an owner-only snapshot at `/data/backups/release-COMMIT-RUN-ATTEMPT.sqlite`. Failure prevents the upgrade.
 4. Rechecks the latest main and current deployment, then applies a resource-version-guarded patch and waits for rollout/internal health checks.
-5. Verifies public assets and bootstrap. GitHub independently waits for `/api/version` to equal the requested commit and verifies the exact `/app.js` and `/api/bootstrap` before reporting success.
+5. Verifies public assets and bootstrap. GitHub independently waits for `/api/version` to match the requested commit and workflow attempt and verifies the exact `/app.js` and `/api/bootstrap` before reporting success.
 
 The production environment and workflow concurrency serialize requests. Jobs never retry automatically, have an eight-minute deadline, and do not automatically roll back images or restore data. Re-run the latest workflow to create a new attempt. Flux prunes the previous release Job when the next request arrives; it never owns/prunes the app or PVC. Completed Jobs are retained until the next request so Flux does not recreate them. Removing the Flux Kustomization orphans its Job.
 
