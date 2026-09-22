@@ -80,6 +80,12 @@ test('successful release backs up before mutation and verifies readiness without
   const backupIndex=f.calls.findIndex(c=>c.args.includes(backupCode));
   assert.ok(backupIndex<f.calls.findIndex(c=>mutations([c]).length));
   assert.equal(mutations(f.calls).length,1);
+  for (const { args, input } of f.calls.filter(c => c.args.includes('patch'))) {
+    assert.equal(input, undefined);
+    assert.ok(!args.includes('--patch-file=/dev/stdin'));
+    const document = JSON.parse(args[args.indexOf('--patch') + 1]);
+    assert.equal(document.find(p => p.path === '/spec/template/spec/containers/0/image' && p.op === 'replace').value, nextImage);
+  }
   assert.ok(f.calls.some(c=>c.args.includes('rollout')));
   assert.ok(f.calls.every(c=>!c.args.includes('secret')&&!c.args.includes('edge-caddy')&&!c.args.includes('delete')&&!c.args.includes('apply')));
 });

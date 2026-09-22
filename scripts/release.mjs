@@ -74,7 +74,9 @@ export function createReleaser(kubeconfig, run = (args, input) => execFileSync('
     const pod = pods.find(p => !p.metadata.deletionTimestamp && p.spec.nodeName === 'netcupmaniaserver' && p.spec.containers?.length === 1 && p.spec.containers[0].name === 'web' && p.spec.containers[0].image === previousImage && p.status?.conditions?.some(c => c.type === 'Ready' && c.status === 'True'));
     assert(pod, 'No healthy salon pod available for the required backup.');
     const backupPath = `/data/backups/release-${revision}-${runId}-${attempt}.sqlite`;
-    const patch = (value, dry = false) => call(['-n', namespace, 'patch', 'deployment', deploymentName, '--type=json', ...(dry ? ['--dry-run=server'] : []), '--patch-file=/dev/stdin', '-o', 'name'], JSON.stringify(value));
+    // Node's piped stdin is a socket on Linux; reopening /dev/stdin fails with ENXIO.
+    // This patch contains only the public image, revision and existing annotations.
+    const patch = (value, dry = false) => call(['-n', namespace, 'patch', 'deployment', deploymentName, '--type=json', ...(dry ? ['--dry-run=server'] : []), '--patch', JSON.stringify(value), '-o', 'name']);
     report('Validating the deployment update with the API server.');
     patch(releasePatch(current, image, revision), true);
     report('Creating and verifying the database backup.');
