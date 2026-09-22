@@ -1,0 +1,94 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "salon-release-35702353822-1",
+    "namespace": "erdhairdesign",
+    "labels": {
+      "app.kubernetes.io/part-of": "erdhairdesign"
+    }
+  },
+  "spec": {
+    "backoffLimit": 0,
+    "activeDeadlineSeconds": 480,
+    "template": {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/name": "salon-release"
+        }
+      },
+      "spec": {
+        "serviceAccountName": "github-deployer",
+        "automountServiceAccountToken": true,
+        "restartPolicy": "Never",
+        "securityContext": {
+          "runAsNonRoot": true,
+          "runAsUser": 1000,
+          "runAsGroup": 1000,
+          "fsGroup": 1000,
+          "seccompProfile": {
+            "type": "RuntimeDefault"
+          }
+        },
+        "containers": [
+          {
+            "name": "release",
+            "image": "ghcr.io/mendmania/erdhairdesign@sha256:454f0cd7943750a31df6d6cad22d73d5ceca75bf65127e1a69bc5112c93c29d3",
+            "imagePullPolicy": "IfNotPresent",
+            "env": [
+              {
+                "name": "RELEASE_IMAGE",
+                "value": "ghcr.io/mendmania/erdhairdesign@sha256:f7ce059ce66f5bc246b2cfee6c78e1af2d8b0cd2ebbcb2ed015d58736f174c79"
+              },
+              {
+                "name": "RELEASE_SHA",
+                "value": "c1a0aeab1eea78e68f344b2c6566cbfbc44e5364"
+              },
+              {
+                "name": "RELEASE_RUN",
+                "value": "35702353822"
+              },
+              {
+                "name": "RELEASE_ATTEMPT",
+                "value": "1"
+              }
+            ],
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "readOnlyRootFilesystem": true,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              }
+            },
+            "resources": {
+              "requests": {
+                "cpu": "50m",
+                "memory": "64Mi"
+              },
+              "limits": {
+                "cpu": "500m",
+                "memory": "256Mi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "name": "tmp",
+                "mountPath": "/tmp"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "tmp",
+            "emptyDir": {
+              "sizeLimit": "32Mi"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
