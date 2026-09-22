@@ -2,7 +2,7 @@
   "apiVersion": "batch/v1",
   "kind": "Job",
   "metadata": {
-    "name": "salon-release-35702918870-1",
+    "name": "salon-release-35703338659-1",
     "namespace": "erdhairdesign",
     "labels": {
       "app.kubernetes.io/part-of": "erdhairdesign"
@@ -33,20 +33,20 @@
         "containers": [
           {
             "name": "release",
-            "image": "ghcr.io/mendmania/erdhairdesign@sha256:61b5f4b2ade4b172670a572e87dee9832c6920f874e075d7717b25a9ab60b5fe",
+            "image": "ghcr.io/mendmania/erdhairdesign@sha256:7fcc981ddd1b59020415017cd4484e50633edce51a4bb06a90121ee00beb815e",
             "imagePullPolicy": "IfNotPresent",
             "env": [
               {
                 "name": "RELEASE_IMAGE",
-                "value": "ghcr.io/mendmania/erdhairdesign@sha256:42fdd0b81e07ff59a942aa62d3ae9cddd3e121cdec7ec19989cb06e7ef2bec25"
+                "value": "ghcr.io/mendmania/erdhairdesign@sha256:609f28e2f08a584740fd9e77ef7785ef1737a1ed9c68af375606644521774b98"
               },
               {
                 "name": "RELEASE_SHA",
-                "value": "77122f9349d0235f461e595b481114ecb044022d"
+                "value": "bacda119e640ce1e8717898bd32ca4074873a0b9"
               },
               {
                 "name": "RELEASE_RUN",
-                "value": "35702918870"
+                "value": "35703338659"
               },
               {
                 "name": "RELEASE_ATTEMPT",
