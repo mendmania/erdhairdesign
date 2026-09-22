@@ -120,6 +120,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/salon-tools"
           install -m 0755 kubectl "$RUNNER_TEMP/salon-tools/kubectl"
           echo "$RUNNER_TEMP/salon-tools" >> "$GITHUB_PATH"
+      - name: Check production API connectivity
+        if: steps.current.outputs.deploy == 'true'
+        run: kubectl --kubeconfig "$RUNNER_TEMP/salon-kubeconfig.json" --request-timeout=10s get --raw=/readyz
       - name: Back up, deploy and verify production
         if: steps.current.outputs.deploy == 'true'
         env:

@@ -54,31 +54,38 @@ export function releasePatch(current, image, revision) {
   ];
 }
 
-export function createReleaser(kubeconfig, run = (args, input) => execFileSync('kubectl', args, { input, encoding: 'utf8', timeout: 240000, maxBuffer: 2 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] })) {
+export function createReleaser(kubeconfig, run = (args, input) => execFileSync('kubectl', args, { input, encoding: 'utf8', timeout: 240000, maxBuffer: 2 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] }), report = () => {}) {
   assert(kubeconfig, 'Supply an explicit production kubeconfig.');
   const call = (args, input) => run(['--kubeconfig', resolve(kubeconfig), '--request-timeout=30s', ...args], input);
   const getDeployment = () => JSON.parse(call(['-n', namespace, 'get', 'deployment', deploymentName, '-o', 'json']));
   return async function release({ image, revision, runId, attempt, assertFresh = async () => {} }) {
     assert(imagePattern.test(image), 'Use an immutable image from the salon registry.');
     assert(/^[a-f0-9]{40}$/.test(revision) && /^[0-9]+$/.test(runId) && /^[0-9]+$/.test(attempt), 'Invalid release identity.');
+    report('Checking the production cluster identity.');
     const config = JSON.parse(call(['config', 'view', '--minify', '-o', 'json']));
     const cluster = config.clusters?.[0]?.cluster;
     assert(cluster?.server === expectedServer && !cluster['insecure-skip-tls-verify'] && cluster['certificate-authority-data'], 'Wrong production cluster or missing TLS verification.');
     await assertFresh();
+    report('Reading the current salon deployment.');
     let current = getDeployment();
     const previousImage = validateDeployment(current);
+    report('Finding the healthy salon pod.');
     const pods = JSON.parse(call(['-n', namespace, 'get', 'pods', '-l', 'app.kubernetes.io/name=erdhairdesign,app.kubernetes.io/component=web', '-o', 'json'])).items;
     const pod = pods.find(p => !p.metadata.deletionTimestamp && p.spec.nodeName === 'netcupmaniaserver' && p.spec.containers?.length === 1 && p.spec.containers[0].name === 'web' && p.spec.containers[0].image === previousImage && p.status?.conditions?.some(c => c.type === 'Ready' && c.status === 'True'));
     assert(pod, 'No healthy salon pod available for the required backup.');
     const backupPath = `/data/backups/release-${revision}-${runId}-${attempt}.sqlite`;
     const patch = (value, dry = false) => call(['-n', namespace, 'patch', 'deployment', deploymentName, '--type=json', ...(dry ? ['--dry-run=server'] : []), '--patch-file=/dev/stdin', '-o', 'name'], JSON.stringify(value));
+    report('Validating the deployment update with the API server.');
     patch(releasePatch(current, image, revision), true);
+    report('Creating and verifying the database backup.');
     call(['-n', namespace, 'exec', pod.metadata.name, '-c', 'web', '--', 'node', '--input-type=module', '-e', backupCode, backupPath]);
     // Refuse to overwrite another release that completed while the snapshot was running.
     await assertFresh();
     current = getDeployment();
     assert(validateDeployment(current) === previousImage, 'The production image changed during backup; retry from the latest main.');
+    report('Applying the verified release.');
     patch(releasePatch(current, image, revision));
+    report('Waiting for the salon rollout and health checks.');
     call(['-n', namespace, 'rollout', 'status', `deployment/${deploymentName}`, '--timeout=180s']);
     const ready = getDeployment();
     assert(validateDeployment(ready) === image, 'The requested image did not become ready.');
@@ -103,7 +110,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       const head = execFileSync('gh', ['api', 'repos/mendmania/erdhairdesign/git/ref/heads/main', '--jq', '.object.sha'], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
       assert(head === values.revision, 'A newer main commit exists; this outdated release will not deploy.');
     };
-    const result = await createReleaser(values.kubeconfig)({ image: values.image, revision: values.revision, runId: values['run-id'], attempt: values.attempt, assertFresh });
+    const result = await createReleaser(values.kubeconfig, undefined, message => console.error(message))({ image: values.image, revision: values.revision, runId: values['run-id'], attempt: values.attempt, assertFresh });
     const appJs = readFileSync(new URL('../public/app.js', import.meta.url));
     let error;
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -113,7 +120,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     // Never emit kubectl stderr, environment variables, or data from the private snapshot.
-    console.error(error.status !== undefined || error.code ? 'Production command failed. Inspect the deployment with the owner kubeconfig. No automatic rollback or data restore was attempted.' : error.message);
+    const providerError = String(error.stderr || '');
+    const reason = /timed? ?out|deadline exceeded|i\/o timeout/i.test(providerError) || error.code === 'ETIMEDOUT' ? 'The Kubernetes API could not be reached in time from the runner.' : /forbidden/i.test(providerError) ? 'The deployment identity lacks permission for this operation.' : /unauthorized/i.test(providerError) ? 'The Kubernetes deployment credential was rejected.' : 'Production command failed at the last reported step.';
+    console.error(error.status !== undefined || error.code ? reason + ' No automatic rollback or data restore was attempted.' : error.message);
     process.exitCode = 1;
   }
 }
