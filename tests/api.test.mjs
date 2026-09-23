@@ -224,7 +224,7 @@ test('manual booking endpoints require verified staff and show guest and account
   assert.equal((await request(`/api/availability?service=mens-cut&date=${date}`)).body.slots[0].available,true);
 });
 
-test('only the super admin can configure booking email recipients while every admin has a private inbox', async t => {
+test('only the super admin can configure email language while all admins receive reservations', async t => {
   const {db,request,url}=await fixture(t);
   const {createSession}=await import('../lib/auth.mjs');
   db.exec(`INSERT INTO users (id,email,name,password,verified,role,created_at) VALUES
@@ -245,8 +245,8 @@ test('only the super admin can configure booking email recipients while every ad
   }
   const prefs=await call('owner','/api/admin/notification-settings','PUT',{recipientIds:['owner','staff'],language:'sq'});
   assert.equal(prefs.status,200);assert.equal(prefs.body.recipients.length,2);assert.equal(prefs.body.emailConfigured,false);
-  assert.equal((await call('owner','/api/admin/notification-settings','PUT',{recipientIds:['customer'],language:'en'})).status,400);
-  // The general settings endpoint must not provide a route around owner-only recipient controls.
+  assert.equal((await call('owner','/api/admin/notification-settings','PUT',{language:'invalid'})).status,400);
+  // The general settings endpoint must not provide a route around owner-only email language controls.
   const bootstrap=(await request('/api/bootstrap')).body;
   assert.equal(bootstrap.settings.notificationRecipients,undefined);
   assert.equal((await call('staff','/api/admin/settings','PUT',{...bootstrap.settings,recipientIds:['customer'],notificationRecipients:['customer']})).status,200);
@@ -257,14 +257,14 @@ test('only the super admin can configure booking email recipients while every ad
   assert.equal(manual.status,201);
   const ownerInbox=(await call('owner','/api/admin/notifications')).body;
   assert.equal(ownerInbox.unreadCount,1);assert.equal(ownerInbox.items[0].booking_id,manual.body.booking.id);
-  assert.equal((await call('staff','/api/admin/notifications')).body.unreadCount,0);
+  assert.equal((await call('staff','/api/admin/notifications')).body.unreadCount,1);
   assert.equal((await call('staff','/api/admin/notifications/read','POST',{id:ownerInbox.items[0].id})).status,200);
   assert.equal((await call('owner','/api/admin/notifications')).body.unreadCount,1);
   assert.equal((await call('owner','/api/admin/notifications/read','POST',{id:ownerInbox.items[0].id})).body.unreadCount,0);
   const pending=(await call('owner','/api/admin/notification-settings')).body.pending;
-  assert.equal(pending,1);
+  assert.equal(pending,2);
   await call('owner','/api/admin/notification-settings','PUT',{recipientIds:[],language:'en'});
-  assert.equal((await call('owner','/api/admin/notification-settings')).body.pending,0);
+  assert.equal((await call('owner','/api/admin/notification-settings')).body.pending,2);
   assert.equal((await fetch(url+'/admin/notifications')).status,200);
 });
 
@@ -301,4 +301,62 @@ test('other admins cannot see the protected owner in account lists, even before 
   assert.equal(db.prepare('SELECT role FROM users WHERE id=?').get('owner').role, 'super_admin');
   assert.deepEqual((await call('owner', '/api/admin/clients')).body.clients.map(client => client.id).sort(), ['customer', 'owner', 'staff']);
   assert.ok((await call('owner', '/api/admin/dashboard')).body.admins.some(admin => admin.id === 'owner'));
+});
+
+test('HTTP reservations retain client language and approval queues a confirmation without affecting visit completion',async t=>{
+  const {db,request}=await fixture(t);
+  const {createSession}=await import('../lib/auth.mjs');
+  db.exec(`INSERT INTO users(id,email,name,password,verified,role,created_at) VALUES
+    ('client','client@example.test','Client','unused',1,'client',0),
+    ('admin','admin@example.test','Admin','unused',1,'admin',0)`);
+  const headers=id=>({Cookie:`erd_session=${createSession(db,id)}`});
+  const date=addDays((await request('/api/bootstrap')).body.today,1);
+  const slot=(await request(`/api/availability?service=mens-cut&date=${date}`)).body.slots[0];
+  const created=await request('/api/bookings','POST',{serviceId:'mens-cut',date,time:slot.time,expectedPrice:slot.price,notes:'',repeatWeeks:0},{...headers('client'),'Accept-Language':'sq'});
+  assert.equal(created.status,201);
+  assert.equal(created.body.booking.email_language,'sq');
+  assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,0);
+  const path=`/api/bookings/${created.body.booking.id}/action`;
+  assert.equal((await request(path,'POST',{action:'approve'},headers('client'))).status,403);
+  const approved=await request(path,'POST',{action:'approve'},headers('admin'));
+  assert.equal(approved.status,200);assert.equal(approved.body.booking.status,'confirmed');
+  const job=db.prepare('SELECT * FROM client_notifications').get();
+  assert.equal(job.user_id,'client');assert.equal(job.language,'sq');assert.equal(job.email_status,'pending');
+  assert.equal((await request(path,'POST',{action:'approve'},headers('admin'))).status,409);
+  assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,1);
+});
+
+test('guests can request a booking over HTTP without an account and admins see their contact details',async t=>{
+  const {db,request}=await fixture(t);
+  const {createSession}=await import('../lib/auth.mjs');
+  const date=addDays((await request('/api/bootstrap')).body.today,1);
+  const slot=(await request(`/api/availability?service=mens-cut&date=${date}`)).body.slots[0];
+  const body={name:'Guest Client',email:'guest@example.test',serviceId:'mens-cut',date,time:slot.time,expectedPrice:slot.price};
+  const result=await request('/api/bookings/guest','POST',body,{'Accept-Language':'sq'});
+  assert.equal(result.status,201);assert.equal(result.body.booking.status,'pending');assert.equal(result.body.booking.email_language,'sq');
+  assert.equal(db.prepare('SELECT count(*) n FROM users').get().n,0);
+  assert.equal((await request('/api/bookings')).status,401);
+  assert.equal((await request(`/api/bookings/${result.body.booking.id}/action`,'POST',{action:'approve'})).status,401);
+  db.exec("INSERT INTO users(id,email,name,password,verified,role,created_at) VALUES('admin','admin@example.test','Admin','unused',1,'admin',0)");
+  const headers={Cookie:`erd_session=${createSession(db,'admin')}`};
+  const dashboard=await request('/api/admin/dashboard','GET',undefined,headers);
+  assert.equal(dashboard.body.bookings[0].email,'guest@example.test');assert.equal(dashboard.body.bookings[0].phone,'');
+  assert.equal((await request(`/api/bookings/${result.body.booking.id}/action`,'POST',{action:'approve'},headers)).status,200);
+  assert.equal(db.prepare('SELECT user_id FROM client_notifications').get().user_id,null);
+});
+
+test('public guest booking endpoint rate limits requests',async t=>{
+  const {request}=await fixture(t);
+  for(let i=0;i<10;i++) assert.equal((await request('/api/bookings/guest','POST',{})).status,400);
+  assert.equal((await request('/api/bookings/guest','POST',{})).status,429);
+});
+
+test('registration accepts Name123 and six-character passwords, rejects shorter ones, and supports login',async t=>{
+  const {request}=await fixture(t);
+  const account={name:'Test Client',email:'short@example.test',phone:'+38312345678',password:'Name123'};
+  assert.equal((await request('/api/auth/register','POST',{...account,password:'12345'})).status,400);
+  assert.equal((await request('/api/auth/register','POST',account)).status,201);
+  await request('/api/auth/logout','POST',{});
+  assert.equal((await request('/api/auth/login','POST',{email:account.email,password:account.password})).status,200);
+  assert.equal((await request('/api/auth/register','POST',{...account,email:'six@example.test',password:'abcdef'})).status,201);
 });

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
 import { isIP } from 'node:net';
 import { openStore, settingsFor, transaction } from './lib/store.mjs';
-import { AppError, demand, availability, createBooking, createAdminBooking, changeBooking, updateSettings, localDate } from './lib/booking.mjs';
+import { AppError, demand, availability, createBooking, createGuestBooking, createAdminBooking, changeBooking, updateSettings, localDate } from './lib/booking.mjs';
 import { register, passwordMatches, passwordHash, sessionUser, publicUser, createSession, sendVerification, verifyEmail, validateDetails, hash } from './lib/auth.mjs';
 
 const root = fileURLToPath(new URL('./public/', import.meta.url));
@@ -91,7 +91,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
         rateLimit(req, 'register', 10);
         const account = await register(db, input);
         cookie(createSession(db, account.id));
-        try { return json({ user: publicUser(account), ...await sendVerification(db, account, { ...mail, language: req.headers['accept-language']?.startsWith('sq') ? 'sq' : 'en' }) }, 201); }
+        try { return json({ user: publicUser(account), ...await sendVerification(db, account, { ...mail, language: req.headers['accept-language']?.startsWith('en') ? 'en' : 'sq' }) }, 201); }
         catch (e) { if (!(e instanceof AppError)) throw e; return json({ user: publicUser(account), emailError: e.message }, 201); }
       }
       if (route === 'POST /api/auth/login') {
@@ -110,7 +110,7 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       }
       if (route === 'POST /api/auth/resend') {
         requireUser(); rateLimit(req, 'resend', 10); demand(!user.verified, 'Your email is already verified.');
-        return json(await sendVerification(db, user, { ...mail, language: req.headers['accept-language']?.startsWith('sq') ? 'sq' : 'en' }));
+        return json(await sendVerification(db, user, { ...mail, language: req.headers['accept-language']?.startsWith('en') ? 'en' : 'sq' }));
       }
       if (route === 'POST /api/auth/verify') {
         requireUser(); rateLimit(req, 'verify', 30); verifyEmail(db, user.id, input.code);
@@ -122,7 +122,8 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
         return json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)) });
       }
       if (route === 'GET /api/bookings') { requireUser(); return json({ bookings: db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY created_at DESC').all(user.id) }); }
-      if (route === 'POST /api/bookings') { requireUser(); return json({ booking: createBooking(db, user.id, input) }, 201); }
+      if (route === 'POST /api/bookings/guest') { rateLimit(req, 'guest-booking', 10); return json({ booking: createGuestBooking(db, {...input, language: req.headers['accept-language']?.startsWith('en') ? 'en' : 'sq'}) }, 201); }
+      if (route === 'POST /api/bookings') { requireUser(); return json({ booking: createBooking(db, user.id, {...input, language: req.headers['accept-language']?.startsWith('en') ? 'en' : 'sq'}) }, 201); }
       if (req.method === 'POST' && /^\/api\/bookings\/[^/]+\/action$/.test(url.pathname)) {
         requireUser(); return json({ booking: changeBooking(db, user, url.pathname.split('/')[3], input.action) });
       }
@@ -133,9 +134,9 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       if (route === 'PUT /api/admin/notification-settings') return json({...saveNotificationPreferences(db, user, input), emailConfigured: Boolean(apiKey && from)});
       if (route === 'POST /api/admin/notification-settings/retry') return json({...retryNotificationEmails(db, user), emailConfigured: Boolean(apiKey && from)});
       if (route === 'GET /api/admin/clients') return json({ clients: db.prepare("SELECT id,name,email,phone FROM users WHERE ? = 1 OR (role != 'super_admin' AND lower(email) != ?) ORDER BY name,email").all(Number(isSuperAdmin(user)), OWNER_EMAIL) });
-      if (route === 'POST /api/admin/bookings') return json({ booking: createAdminBooking(db, user, input) }, 201);
+      if (route === 'POST /api/admin/bookings') return json({ booking: createAdminBooking(db, user, {...input, language: req.headers['accept-language']?.startsWith('en') ? 'en' : 'sq'}) }, 201);
       if (route === 'GET /api/admin/dashboard') {
-        return json({ bookings: db.prepare("SELECT b.*, COALESCE(u.name,b.guest_name) AS name, COALESCE(u.email,'') AS email, COALESCE(u.phone,b.guest_phone) AS phone, COALESCE(u.approvals,0) AS approvals FROM bookings b LEFT JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC").all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services WHERE active = 1').all(), vacations: db.prepare('SELECT * FROM vacations ORDER BY start_date').all(), ...(isSuperAdmin(user) ? { admins: db.prepare("SELECT id,name,email,role FROM users WHERE role IN ('admin','super_admin') ORDER BY role DESC,name").all() } : {}) });
+        return json({ bookings: db.prepare("SELECT b.*, COALESCE(u.name,b.guest_name) AS name, COALESCE(u.email,b.guest_email) AS email, COALESCE(u.phone,b.guest_phone) AS phone, COALESCE(u.approvals,0) AS approvals FROM bookings b LEFT JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC").all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services WHERE active = 1').all(), vacations: db.prepare('SELECT * FROM vacations ORDER BY start_date').all(), ...(isSuperAdmin(user) ? { admins: db.prepare("SELECT id,name,email,role FROM users WHERE role IN ('admin','super_admin') ORDER BY role DESC,name").all() } : {}) });
       }
       if (route === 'PUT /api/admin/settings') return json({ settings: updateSettings(db, input) });
       if (route === 'PUT /api/admin/team') return json(setAdmin(db, user, input.email, input.role));

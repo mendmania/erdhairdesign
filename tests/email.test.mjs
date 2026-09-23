@@ -11,7 +11,7 @@ function fixture(t) {
     .run(user.id, user.email, 'Test Client', 'unused', Date.now());
   return { db, user };
 }
-const config = { production: true, apiKey: 'test-api-key-only', from: 'ERD Hair Design <bookings@example.test>' };
+const config = { language: 'en', production: true, apiKey: 'test-api-key-only', from: 'ERD Hair Design <bookings@example.test>' };
 
 test('Brevo receives the API key, sender, recipient and usable verification code without exposing it to the client', async t => {
   const { db, user } = fixture(t);
@@ -28,6 +28,9 @@ test('Brevo receives the API key, sender, recipient and usable verification code
     assert.equal(payload.subject, 'Your ERD verification code');
     deliveredCode = payload.textContent.match(/code is (\d{6})/)[1];
     assert.match(payload.textContent, /10 minutes/);
+    assert.ok(payload.htmlContent.includes(deliveredCode));
+    assert.match(payload.htmlContent, /<html lang="en"/);
+    assert.match(payload.htmlContent, /Welcome to ERD/);
     return new Response(JSON.stringify({ messageId: 'test-message' }), { status: 201 });
   });
   assert.deepEqual(await sendVerification(db, user, config), {});
@@ -85,6 +88,8 @@ test('Albanian verification emails contain a usable code and never expose it in 
     assert.equal(payload.subject,'Kodi juaj i verifikimit ERD');
     assert.match(payload.textContent,/10 minutash/);
     code=payload.textContent.match(/\b\d{6}\b/)[0];
+    assert.ok(payload.htmlContent.includes(code));
+    assert.match(payload.htmlContent, /<html lang="sq"/);
     return new Response('{}',{status:201});
   });
   assert.deepEqual(await sendVerification(db,user,{...config,language:'sq'}),{});

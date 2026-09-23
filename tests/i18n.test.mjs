@@ -6,10 +6,11 @@ import { saveService } from '../lib/admin.mjs';
 import { createBooking } from '../lib/booking.mjs';
 
 test('English and Albanian labels switch in both directions with a safe fallback',()=>{
+  assert.equal(getLanguage(),'sq');
   setLanguage('sq');assert.equal(t('Sign in'),'Hyni');assert.equal(h('<button>Sign in</button>'),'<button>Hyni</button>');
   assert.match(formatDate('2030-09-14'),/shtator/);
   setLanguage('en');assert.equal(h('<button>Sign in</button>'),'<button>Sign in</button>');
-  setLanguage('unsupported');assert.equal(getLanguage(),'en');assert.equal(t('Custom salon text'),'Custom salon text');
+  setLanguage('unsupported');assert.equal(getLanguage(),'sq');assert.equal(t('Custom salon text'),'Custom salon text');
 });
 test('localization preserves opaque user values, canonical form values, and escaped markup',()=>{
   setLanguage('sq');

@@ -68,9 +68,9 @@ test('legacy booking migration retains appointments, translations, constraints a
   const path=join(dir,'salon.sqlite'); let db=openStore(path);
   const admin=seed(db);
   db.exec("UPDATE users SET verified=1 WHERE id='client'");
-  const b=createBooking(db,'client',{...input(),repeatWeeks:2},NOW);
+  const b=createBooking(db,'client',{...input(),repeatWeeks:2,language:'en'},NOW);
   // Restore the previous release's schema, including its non-null account ID.
-  db.exec('DROP TABLE admin_notifications; DROP TABLE booking_events;');
+  db.exec('DROP TABLE admin_notifications; DROP TABLE booking_events; DROP TABLE client_notifications; ALTER TABLE bookings DROP COLUMN email_language; ALTER TABLE bookings DROP COLUMN guest_email;');
   const legacySchema=db.prepare("SELECT sql FROM sqlite_master WHERE name='bookings'").get().sql
     .replace('CREATE TABLE bookings','CREATE TABLE legacy_bookings')
     .replace('user_id TEXT REFERENCES','user_id TEXT NOT NULL REFERENCES')
