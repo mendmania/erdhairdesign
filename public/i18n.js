@@ -1,8 +1,8 @@
 import { albanian } from './locales/sq.js?v=20260921-admin-ux';
-let language = 'en';
+let language = 'sq';
 export const getLanguage = () => language;
 export const locale = () => language === 'sq' ? 'sq-AL' : 'en-GB';
-export function setLanguage(value) { language = value === 'sq' ? 'sq' : 'en'; }
+export function setLanguage(value) { language = value === 'en' ? 'en' : 'sq'; }
 export function t(source) {
   if (language !== 'sq') return source;
   const trimmed = source.trim();

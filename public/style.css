@@ -2705,3 +2705,40 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
 .dialog-actions { display: flex; justify-content: space-between; gap: 12px; }
 .admin-dialog-footer .form-error:not(:empty) { margin-bottom: 12px; }
 @media (max-width: 760px) { .admin-dialog-footer { bottom: -28px; } .dialog-actions .button-primary { flex: 1; } }
+
+/* Keep modal contents within the viewport, including native date/select controls. */
+dialog { width: min(450px, calc(100vw - 24px)); max-width: calc(100vw - 24px); overscroll-behavior: contain; }
+dialog form, dialog fieldset, dialog label, dialog .field-grid > *, dialog .reserve-summary > div { min-width: 0; max-width: 100%; }
+dialog fieldset { min-inline-size: 0; }
+dialog input:not([type="radio"]):not([type="checkbox"]), dialog select, dialog textarea { width: 100%; max-width: 100%; min-width: 0; }
+dialog select { text-overflow: ellipsis; }
+dialog h2, dialog p, dialog label, dialog summary, dialog .reserve-summary { overflow-wrap: anywhere; }
+dialog h2 { padding-right: 26px; }
+dialog .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.reservation-dialog { width: min(640px, calc(100vw - 24px)); }
+.reserve-summary > div { flex: 1; }
+.reserve-client-modes label { overflow-wrap: anywhere; }
+.optional-contact { margin: 4px 0 16px; border: 1px solid var(--border); border-radius: 10px; padding: 0 14px; }
+.optional-contact summary { padding: 14px 0; cursor: pointer; font-size: 14px; font-weight: 500; min-height: 48px; }
+.optional-contact .fine-print { margin-bottom: 16px; }
+.booking-modes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-bottom: 22px; }
+.booking-modes button { min-width: 0; min-height: 48px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; }
+.booking-modes button[aria-pressed="true"] { background: var(--green); color: white; border-color: var(--green); }
+#guest-details-form > label { margin-bottom: 18px; }
+#guest-details-form > .fine-print { margin-bottom: 20px; }
+.review-list dd { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  dialog .field-grid { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  dialog input, dialog select, dialog textarea { font-size: 16px; }
+  dialog .eyebrow { padding-right: 24px; font-size: 11px; }
+  .reservation-dialog { padding: 24px 18px; }
+}
+@media (max-width: 400px) {
+  .reserve-client-modes { grid-template-columns: minmax(0,1fr); }
+  .reservation-footer .form-footer, .dialog-actions { flex-direction: column-reverse; align-items: stretch; }
+  .reservation-footer .form-footer .button, .dialog-actions .button { width: 100%; }
+  dialog h2 { font-size: 30px; }
+}
+@media (max-height: 600px) {
+  .reservation-footer, .admin-dialog-footer { position: static; margin-bottom: 0; }
+}
