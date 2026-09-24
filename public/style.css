@@ -2626,7 +2626,7 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
 .email-settings .admin-form { border: 0; border-top: 1px solid var(--border); border-radius: 0 0 14px 14px; }
 .admin-dialog h2 { font-family: var(--sans); font-size: 28px; line-height: 1.2; letter-spacing: -.7px; padding-right: 20px; }
 .admin-dialog .modal-description { line-height: 1.6; }
-.reservation-dialog { width: 640px; padding: 28px; }
+.reservation-dialog { width: 640px; padding: 28px; overflow-x: hidden; overflow-y: auto; }
 .reserve-section, .reserve-existing { padding: 0; margin: 20px 0; border: 0; min-width: 0; }
 .reserve-section > legend { font-size: 14px; font-weight: 600; margin-bottom: 14px; padding: 0; }
 .reserve-client-modes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-bottom: 18px; }
@@ -2634,7 +2634,7 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
 .reserve-client-modes label:has(input:checked) { border-color: var(--green); background: var(--sage); }
 .reserve-client-modes input { width: 18px; height: 18px; min-height: 0; flex-shrink: 0; margin: 0; accent-color: var(--green); }
 .reservation-dialog .field-grid { margin-top: 16px; }
-.reservation-footer { position: sticky; bottom: -28px; background: #f9f8f4; padding: 16px 0 24px; margin-bottom: -24px; border-top: 1px solid var(--border); z-index: 2; }
+.reservation-footer { position: static; padding-top: 16px; border-top: 1px solid var(--border); }
 .reserve-summary { display: flex; justify-content: space-between; gap: 16px; align-items: center; font-size: 14px; }
 .reserve-summary > div { display: flex; flex-direction: column; gap: 4px; }
 .reserve-summary span { color: var(--muted); font-size: 13px; }
@@ -2679,7 +2679,6 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
   .reservation-dialog { padding: 24px 18px; }
   .reserve-client-modes { gap: 8px; }
   .reserve-client-modes label { padding: 10px 8px; font-size: 13px; }
-  .reservation-footer { bottom: -24px; }
   .reservation-footer .form-footer { flex-direction: row; }
   .reservation-footer .button-primary { flex: 1; }
 }
@@ -2688,7 +2687,7 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
 .reservation-dialog .reserve-section { margin: 16px 0; }
 .reservation-dialog .reserve-existing { margin: 0; }
 .reservation-dialog .reserve-guest .field-grid { margin-top: 0; }
-.reservation-dialog { scroll-padding-block: 20px 160px; }
+.reservation-dialog { scroll-padding-block: 20px; }
 .admin-view-picker { display: none; }
 @media (max-width: 760px) {
   .workspace-mode .header > nav { display: none; }
@@ -2740,5 +2739,5 @@ dialog .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   dialog h2 { font-size: 30px; }
 }
 @media (max-height: 600px) {
-  .reservation-footer, .admin-dialog-footer { position: static; margin-bottom: 0; }
+  .admin-dialog-footer { position: static; margin-bottom: 0; }
 }
