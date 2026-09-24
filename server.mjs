@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
 import { isIP } from 'node:net';
 import { openStore, settingsFor, transaction } from './lib/store.mjs';
-import { AppError, demand, availability, createBooking, createGuestBooking, createAdminBooking, changeBooking, updateSettings, localDate } from './lib/booking.mjs';
+import { AppError, demand, availability, createBooking, createGuestBooking, createAdminBooking, changeBooking, rescheduleAvailability, rescheduleBooking, updateSettings, localDate } from './lib/booking.mjs';
 import { register, passwordMatches, passwordHash, sessionUser, publicUser, createSession, sendVerification, verifyEmail, validateDetails, hash } from './lib/auth.mjs';
 
 const root = fileURLToPath(new URL('./public/', import.meta.url));
@@ -135,6 +135,12 @@ export function createApp({ db = openStore(), production = process.env.NODE_ENV 
       if (route === 'POST /api/admin/notification-settings/retry') return json({...retryNotificationEmails(db, user), emailConfigured: Boolean(apiKey && from)});
       if (route === 'GET /api/admin/clients') return json({ clients: db.prepare("SELECT id,name,email,phone FROM users WHERE ? = 1 OR (role != 'super_admin' AND lower(email) != ?) ORDER BY name,email").all(Number(isSuperAdmin(user)), OWNER_EMAIL) });
       if (route === 'POST /api/admin/bookings') return json({ booking: createAdminBooking(db, user, {...input, language: req.headers['accept-language']?.startsWith('en') ? 'en' : 'sq'}) }, 201);
+      if (req.method === 'GET' && /^\/api\/admin\/bookings\/[^/]+\/availability$/.test(url.pathname)) {
+        return json(rescheduleAvailability(db, user, url.pathname.split('/')[4], url.searchParams.get('date')));
+      }
+      if (req.method === 'POST' && /^\/api\/admin\/bookings\/[^/]+\/reschedule$/.test(url.pathname)) {
+        return json({booking:rescheduleBooking(db, user, url.pathname.split('/')[4], input)});
+      }
       if (route === 'GET /api/admin/dashboard') {
         return json({ bookings: db.prepare("SELECT b.*, COALESCE(u.name,b.guest_name) AS name, COALESCE(u.email,b.guest_email) AS email, COALESCE(u.phone,b.guest_phone) AS phone, COALESCE(u.approvals,0) AS approvals FROM bookings b LEFT JOIN users u ON u.id = b.user_id ORDER BY b.starts_at DESC").all(), settings: settingsFor(db), services: db.prepare('SELECT * FROM services WHERE active = 1').all(), vacations: db.prepare('SELECT * FROM vacations ORDER BY start_date').all(), ...(isSuperAdmin(user) ? { admins: db.prepare("SELECT id,name,email,role FROM users WHERE role IN ('admin','super_admin') ORDER BY role DESC,name").all() } : {}) });
       }

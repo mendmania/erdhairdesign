@@ -82,7 +82,7 @@ test('legacy recipient selections do not suppress emails; demotion stops queued 
   setAdmin(db,owner,'admin@example.test','client');
   assert.equal(jobs(db).find(n=>n.user_id==='admin').email_status,'skipped');
   setAdmin(db,owner,'admin@example.test','admin'); select(db,owner);
-  let sent=0; const worker=createNotificationWorker(db,config,{now:()=>NOW,send:async()=>{sent++;}});
+  let sent=0; const worker=createNotificationWorker(db,config,{now:()=>NOW,send:async job=>{if(job.queue==='admin_notifications')sent++;}});
   await worker.kick(); await worker.stop(); assert.equal(sent,1);
 });
 
@@ -98,7 +98,7 @@ test('repeats create a notification for the next reservation without duplicating
 test('email failures retry with backoff, stop after eight attempts, and can be retried by the owner',async t=>{
   const {db,owner}=fixture(t); setAdmin(db,owner,'admin@example.test','client'); createBooking(db,'client',input(),NOW);
   let now=NOW,attempts=0,fail=true;
-  const worker=createNotificationWorker(db,config,{now:()=>now,send:async()=>{attempts++;if(fail)throw new Error('secret provider details');}});
+  const worker=createNotificationWorker(db,config,{now:()=>now,send:async job=>{if(job.queue!=='admin_notifications')return;attempts++;if(fail)throw new Error('secret provider details');}});
   await Promise.all([worker.kick(),worker.kick()]); assert.equal(attempts,1);
   assert.equal(jobs(db)[0].next_attempt_at,NOW+60000);
   await worker.kick(); assert.equal(attempts,1);
@@ -116,7 +116,8 @@ test('delivery rechecks recipients and skips stale creation emails while deliver
   db.exec("UPDATE users SET verified=0 WHERE id='admin'");
   const sent=[]; const worker=createNotificationWorker(db,config,{now:()=>NOW,send:async job=>sent.push(job)});
   await worker.kick(); await worker.stop();
-  assert.deepEqual(sent.map(j=>[j.user_id,j.kind]),[['owner','cancelled']]);
+  assert.deepEqual(sent.filter(j=>j.queue==='admin_notifications').map(j=>[j.user_id,j.kind]),[['owner','cancelled']]);
+  assert.ok(sent.some(j=>j.queue==='client_notifications' && j.kind==='cancelled' && j.user_id==='client'));
 });
 
 test('email is queued across a database restart and missing configuration never sends or consumes retries',async t=>{
@@ -127,7 +128,7 @@ test('email is queued across a database restart and missing configuration never 
   let sent=0; const off=createNotificationWorker(db,{...config,apiKey:''},{now:()=>NOW,send:async()=>sent++});
   await off.kick();await off.stop();assert.equal(jobs(db)[0].attempts,0);db.close();
   db=openStore(path);
-  const worker=createNotificationWorker(db,config,{now:()=>NOW,send:async job=>{assert.equal(job.email_key,key);sent++;}});
+  const worker=createNotificationWorker(db,config,{now:()=>NOW,send:async job=>{if(job.queue!=='admin_notifications')return;assert.equal(job.email_key,key);sent++;}});
   await worker.kick();await worker.stop();assert.equal(sent,1);assert.equal(jobs(db)[0].email_status,'sent');db.close();
 });
 
@@ -179,7 +180,7 @@ test('stopping the worker aborts in-flight delivery and leaves the leased job re
   await restarted.kick();await restarted.stop();assert.equal(jobs(db)[0].email_status,'sent');
 });
 
-function clientJobs(db) { return db.prepare('SELECT * FROM client_notifications ORDER BY id').all(); }
+function clientJobs(db) { return db.prepare("SELECT * FROM client_notifications WHERE kind='confirmed' ORDER BY id").all(); }
 
 test('approval atomically queues one localized client confirmation and sends it to My visits',async t=>{
   const {db,admin}=fixture(t);

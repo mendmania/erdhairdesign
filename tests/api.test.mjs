@@ -315,15 +315,15 @@ test('HTTP reservations retain client language and approval queues a confirmatio
   const created=await request('/api/bookings','POST',{serviceId:'mens-cut',date,time:slot.time,expectedPrice:slot.price,notes:'',repeatWeeks:0},{...headers('client'),'Accept-Language':'sq'});
   assert.equal(created.status,201);
   assert.equal(created.body.booking.email_language,'sq');
-  assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,0);
+  assert.equal(db.prepare("SELECT count(*) n FROM client_notifications WHERE kind='confirmed'").get().n,0);
   const path=`/api/bookings/${created.body.booking.id}/action`;
   assert.equal((await request(path,'POST',{action:'approve'},headers('client'))).status,403);
   const approved=await request(path,'POST',{action:'approve'},headers('admin'));
   assert.equal(approved.status,200);assert.equal(approved.body.booking.status,'confirmed');
-  const job=db.prepare('SELECT * FROM client_notifications').get();
+  const job=db.prepare("SELECT * FROM client_notifications WHERE kind='confirmed'").get();
   assert.equal(job.user_id,'client');assert.equal(job.language,'sq');assert.equal(job.email_status,'pending');
   assert.equal((await request(path,'POST',{action:'approve'},headers('admin'))).status,409);
-  assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,1);
+  assert.equal(db.prepare("SELECT count(*) n FROM client_notifications WHERE kind='confirmed'").get().n,1);
 });
 
 test('guests can request a booking over HTTP without an account and admins see their contact details',async t=>{

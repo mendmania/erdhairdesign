@@ -21,7 +21,7 @@ test('guest requests require no account or phone, always await approval and rese
   assert.equal(b.user_id,null);assert.equal(b.guest_email,'guest@example.test');assert.equal(b.guest_phone,'');
   assert.equal(b.status,'pending');assert.equal(b.repeat_weeks,0);assert.equal(b.created_by,null);
   assert.equal(db.prepare('SELECT count(*) n FROM users').get().n,1);
-  assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,0);
+  assert.equal(db.prepare("SELECT count(*) n FROM client_notifications WHERE kind='requested'").get().n,1);
   assert.equal(db.prepare('SELECT email_status FROM admin_notifications').get().email_status,'pending');
   assert.equal(availability(db,'cut-style',b.date,NOW).slots.find(s=>s.time==='09:30').available,false);
   assert.throws(()=>createGuestBooking(db,input({time:'10:00'}),NOW),/active appointment/);
@@ -56,7 +56,7 @@ test('guest approval emails the supplied address in the chosen language without 
   const email=bookingEmail(job,'https://salon.example.test');
   assert.match(email.subject,/konfirmuar/);assert.match(email.textContent,/kontaktoni sallonin/);
   assert.match(email.textContent,/\/studio/);assert.doesNotMatch(email.textContent,/\/appointments|\/admin|Europe\/Belgrade/);
-  assert.equal(db.prepare('SELECT email_status FROM client_notifications').get().email_status,'sent');
+  assert.equal(db.prepare("SELECT email_status FROM client_notifications WHERE kind='confirmed'").get().email_status,'sent');
 });
 
 test('admins can book with only a name and appointment details; optional email enables guest confirmation',t=>{
@@ -75,7 +75,7 @@ test('cancelled guest confirmations are skipped and released slots can be booked
   changeBooking(db,admin,b.id,'approve',NOW);changeBooking(db,admin,b.id,'cancel',NOW);
   const sent=[];const worker=createNotificationWorker(db,{apiKey:'test',from:'salon@example.test'},{now:()=>NOW,send:async job=>sent.push(job)});
   await worker.kick();await worker.stop();assert.ok(sent.every(j=>j.kind!=='confirmed'));
-  assert.equal(db.prepare('SELECT email_status FROM client_notifications').get().email_status,'skipped');
+  assert.equal(db.prepare("SELECT email_status FROM client_notifications WHERE kind='confirmed'").get().email_status,'skipped');
   assert.equal(createGuestBooking(db,input(),NOW).status,'pending');
 });
 
@@ -92,7 +92,7 @@ test('upgrading an account-only email outbox preserves queued jobs and accepts g
   db.close();db=openStore(path);
   assert.deepEqual(db.prepare('SELECT * FROM client_notifications').get(),original);
   createAdminBooking(db,admin,input({time:'10:00'}),NOW);
-  assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,2);
+  assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,3);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);
-  db.close();db=openStore(path);assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,2);db.close();
+  db.close();db=openStore(path);assert.equal(db.prepare('SELECT count(*) n FROM client_notifications').get().n,3);db.close();
 });

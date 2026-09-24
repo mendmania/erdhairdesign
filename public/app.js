@@ -1,6 +1,6 @@
-import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260921-admin-ux';
-import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260921-admin-ux';
-import { selectAppointments, matchesClient } from './admin-view.js?v=20260921-admin-ux';
+import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260924-appointment-updates';
+import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260924-appointment-updates';
+import { selectAppointments, matchesClient } from './admin-view.js?v=20260924-appointment-updates';
 try { setLanguage(localStorage.getItem('erd-language') || 'sq'); } catch {}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -219,7 +219,7 @@ function adminAppointmentCard(b) {
   const ready = b.status === 'confirmed' && b.ends_at <= Date.now();
   const active = ['pending','confirmed'].includes(b.status);
   const phone = String(b.phone || '').replace(/[^+0-9]/g, '');
-  return h`<article class="operation-appointment"><div class="agenda-time"><strong>${b.time}</strong><span>${duration(b.duration)}</span></div><div class="agenda-detail"><div class="appointment-title"><h3>${esc(b.name)}</h3><span class="badge badge-${b.status}">${expired ? h('Expired request') : ready ? h('Ready to complete') : ({pending:h('Needs approval'),confirmed:h('Confirmed'),completed:h('Completed'),cancelled:h('Cancelled'),declined:h('Declined')})[b.status]}</span></div><p class="agenda-service">${esc(bookingName(b))} <strong>${money(b.price)}</strong>${b.outside ? h(' · Outside hours') : ''}</p><div class="agenda-contact">${phone ? h`<a href="tel:${esc(phone)}">${esc(b.phone)}</a>` : ''}${b.email ? h`<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>` : ''}</div>${b.created_by ? h('<p class="fine-print">Booked by the salon</p>') : ''}${b.notes ? h`<p class="agenda-note"><strong>Client note:</strong> ${esc(b.notes)}</p>` : ''}${b.repeat_weeks ? h`<p class="repeat-caption">${icon('repeat')} Every ${b.repeat_weeks} week${b.repeat_weeks === 1 ? '' : 's'}</p>` : ''}${b.recurrence_note ? h`<p class="recurrence-note">${esc(t(b.recurrence_note))}</p>` : ''}${expired ? h('<p class="agenda-warning">This time has passed. Decline the request so the client can book again.</p>') : ''}${b.status === 'pending' && !expired ? h`<p class="fine-print">${b.approvals} manual approvals so far</p>` : ''}</div><div class="agenda-actions">${b.status === 'pending' ? h`${!expired ? h`<button class="button button-primary button-small" data-action="booking-action" data-id="${b.id}" data-value="approve">Approve ${icon('check')}</button>` : ''}<button class="text-button danger" data-action="admin-decline-open" data-id="${b.id}">Decline request</button>` : ready ? h`<button class="button button-primary button-small" data-action="${b.repeat_weeks ? 'admin-complete-open' : 'booking-action'}" data-id="${b.id}" data-value="complete">Complete visit ${icon('check')}</button>` : b.status === 'confirmed' ? h('<span class="fine-print">Complete after the visit ends</span>') : ''}${active ? h`<button class="text-button subtle" data-action="admin-cancel-open" data-id="${b.id}">Cancel visit</button>` : ''}</div></article>`;
+  return h`<article class="operation-appointment"><div class="agenda-time"><strong>${b.time}</strong><span>${duration(b.duration)}</span></div><div class="agenda-detail"><div class="appointment-title"><h3>${esc(b.name)}</h3><span class="badge badge-${b.status}">${expired ? h('Expired request') : ready ? h('Ready to complete') : ({pending:h('Needs approval'),confirmed:h('Confirmed'),completed:h('Completed'),cancelled:h('Cancelled'),declined:h('Declined')})[b.status]}</span></div><p class="agenda-service">${esc(bookingName(b))} <strong>${money(b.price)}</strong>${b.outside ? h(' · Outside hours') : ''}</p><div class="agenda-contact">${phone ? h`<a href="tel:${esc(phone)}">${esc(b.phone)}</a>` : ''}${b.email ? h`<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>` : ''}</div>${b.created_by ? h('<p class="fine-print">Booked by the salon</p>') : ''}${b.notes ? h`<p class="agenda-note"><strong>Client note:</strong> ${esc(b.notes)}</p>` : ''}${b.repeat_weeks ? h`<p class="repeat-caption">${icon('repeat')} Every ${b.repeat_weeks} week${b.repeat_weeks === 1 ? '' : 's'}</p>` : ''}${b.recurrence_note ? h`<p class="recurrence-note">${esc(t(b.recurrence_note))}</p>` : ''}${expired ? h('<p class="agenda-warning">This time has passed. Decline the request so the client can book again.</p>') : ''}${b.status === 'pending' && !expired ? h`<p class="fine-print">${b.approvals} manual approvals so far</p>` : ''}</div><div class="agenda-actions">${b.status === 'pending' ? h`${!expired ? h`<button class="button button-primary button-small" data-action="booking-action" data-id="${b.id}" data-value="approve">Approve ${icon('check')}</button>` : ''}<button class="text-button danger" data-action="admin-decline-open" data-id="${b.id}">Decline request</button>` : ready ? h`<button class="button button-primary button-small" data-action="${b.repeat_weeks ? 'admin-complete-open' : 'booking-action'}" data-id="${b.id}" data-value="complete">Complete visit ${icon('check')}</button>` : b.status === 'confirmed' ? h('<span class="fine-print">Complete after the visit ends</span>') : ''}${active && b.starts_at > Date.now() ? h`<button class="button button-outline button-small" data-action="admin-reschedule" data-id="${b.id}">Change time</button>` : ''}${active ? h`<button class="text-button subtle" data-action="admin-cancel-open" data-id="${b.id}">Cancel visit</button>` : ''}</div></article>`;
 }
 async function adminReserveModal() {
   if (!state.services.length) { openModal(h`<h2 id="modal-title">Add a service first</h2><p class="modal-description">Create your service menu before making a reservation.</p><a class="button button-primary" href="/admin/services">Services & prices ${icon('arrow')}</a>`); return; }
@@ -238,6 +238,61 @@ async function adminReserveModal() {
   $('#modal').classList.add('reservation-dialog');
   $('#admin-reserve-form').clients = clients;
   await loadReserveSlots();
+}
+async function adminRescheduleModal(id) {
+  const booking = state.admin.bookings.find(b => b.id === id);
+  if (!booking) return;
+  openModal(h`<p class="eyebrow">APPOINTMENT DETAILS</p><h2 id="modal-title">Change appointment time</h2>
+    <p class="modal-description">The original appointment stays reserved until you save the new time.</p>
+    <div class="info-box"><div><strong>${esc(booking.name)} · ${esc(bookingName(booking))}</strong><p>Current appointment</p><p>${dateLabel(booking.date)} · ${booking.time} · ${duration(booking.duration)} · ${money(booking.price)}</p></div></div>
+    <form id="admin-reschedule-form">
+      <div class="field-grid"><label>Date<input name="date" id="reschedule-date" type="date" value="${booking.date}" min="${state.today}" max="${dayAfter(state.today,90)}" required/></label>
+      <label>Time<select name="time" id="reschedule-time" required disabled><option value="">Choose a time</option></select></label></div>
+      <p id="reschedule-status" class="fine-print" role="status"></p><button class="text-button" type="button" data-action="reschedule-retry" hidden>Try again</button>
+      <p class="fine-print">The agreed price, duration and approval status stay the same.</p>
+      ${booking.repeat_weeks ? h('<p class="fine-print">Future repeats will follow the new weekday and time.</p>') : ''}
+      <p class="fine-print">${booking.email ? h('The client will receive an email with the updated appointment.') : h('No client email is saved. Please tell the client about the new time.')}</p>
+      <p class="fine-print">All appointment times are in ${esc(state.settings.timezone)}.</p>
+      <div class="reservation-footer"><div id="reschedule-summary" class="reserve-summary" aria-live="polite"></div><p class="form-error" id="modal-error" role="alert"></p>
+      <div class="form-footer"><button class="button button-outline" type="button" data-action="modal-close">Keep current time</button><button class="button button-primary" type="submit" disabled>Save new time</button></div></div>
+    </form>`);
+  $('#modal').classList.add('reservation-dialog');
+  $('#admin-reschedule-form').booking = booking;
+  await loadRescheduleSlots();
+}
+function updateRescheduleSummary(form = $('#admin-reschedule-form')) {
+  if (!form?.isConnected) return;
+  const slot = form.slots?.find(s => s.time === form.elements.time.value);
+  const changed = slot && (form.elements.date.value !== form.booking.date || slot.time !== form.booking.time);
+  $('#reschedule-summary').innerHTML = changed ? h`<div><strong>New appointment</strong><span>${dateLabel(form.elements.date.value)} · ${slot.time}</span></div><strong>${money(form.booking.price)}</strong>` : h('<span>Choose a different date or time.</span>');
+  $('button[type="submit"]',form).disabled = !changed || form.stale || Boolean(form.dataset.submitting);
+}
+async function loadRescheduleSlots(form = $('#admin-reschedule-form')) {
+  if (!form?.isConnected) return;
+  const request = (form.slotRequest || 0) + 1; form.slotRequest = request;
+  const time = form.elements.time, selected = time.value || form.booking.time;
+  const status = $('#reschedule-status'), retry = $('[data-action="reschedule-retry"]',form);
+  form.slots = []; form.stale = false; time.disabled = true; retry.hidden = true;
+  time.innerHTML = h('<option value="">Choose a time</option>'); updateRescheduleSummary(form);
+  if (!form.elements.date.validity.valid || !form.elements.date.value) { status.textContent = t('Choose a date within the next 90 days.'); return; }
+  status.textContent = t('Loading available times…');
+  try {
+    const result = await api(`/admin/bookings/${encodeURIComponent(form.booking.id)}/availability?date=${encodeURIComponent(form.elements.date.value)}`);
+    if (!form.isConnected || request !== form.slotRequest) return;
+    if (result.scheduleVersion !== form.booking.schedule_version || result.status !== form.booking.status) {
+      form.stale = true;
+      throw new Error(t('This appointment changed. Close this dialog and refresh the schedule before trying again.'));
+    }
+    form.slots = result.slots.filter(s => s.available);
+    time.innerHTML += form.slots.map(s => h`<option value="${s.time}">${s.time}${s.outside ? h(' · Outside hours') : ''}</option>`).join('');
+    if (form.slots.some(s => s.time === selected)) time.value = selected;
+    time.disabled = !form.slots.length;
+    status.textContent = t(result.closed ? 'The salon is taking time off on this date. Please choose another day.' : form.slots.length ? 'Choose a different date or time.' : 'No available times. Choose another date.');
+    updateRescheduleSummary(form);
+  } catch (error) {
+    if (!form.isConnected || request !== form.slotRequest) return;
+    status.textContent = error.message; retry.hidden = form.stale;
+  }
 }
 function clientOptions(clients) { return clients.map(u => h`<option value="${esc(u.id)}">${esc(u.name)} · ${esc(u.phone || u.email)}</option>`).join(''); }
 function updateReserveSummary() {
@@ -499,6 +554,8 @@ async function action(button) {
   if (a === 'notification-open') { state.notifications = await api('/admin/notifications/read', 'POST', {id:Number(button.dataset.id)}); await navigate(`/admin?booking=${encodeURIComponent(button.dataset.booking)}`); }
   if (a === 'notification-retry') { state.admin.notificationSettings = await api('/admin/notification-settings/retry', 'POST', {}); $('#notification-delivery-status').innerHTML = notificationDeliveryStatus(state.admin.notificationSettings); toast(h('Failed emails queued for retry.')); }
   if (a === 'admin-reserve') await adminReserveModal();
+  if (a === 'admin-reschedule') await adminRescheduleModal(button.dataset.id);
+  if (a === 'reschedule-retry') await loadRescheduleSlots();
   if (a === 'reserve-retry') await loadReserveSlots();
   if (a === 'service-edit') serviceEditor(button.dataset.id);
   if (a === 'service-remove-open') openModal(h`<h2 id="modal-title">Remove this service?</h2><p class="modal-description">It will disappear from the booking menu. Existing appointments and history are kept. Future repeats for this service will pause.</p><p class="form-error" id="modal-error" role="alert"></p><button class="button button-primary full-width" data-action="service-remove" data-id="${button.dataset.id}">Remove service</button><button class="text-button full-width cancel-keep" data-action="modal-close">Keep service</button>`);
@@ -558,6 +615,8 @@ document.addEventListener('change', async event => {
     if (event.target.name === 'clientMode') { const existing = event.target.value === 'existing'; $('#reserve-existing').hidden = !existing; $('#reserve-existing').disabled = !existing; $('#reserve-guest').hidden = existing; $('#reserve-guest').disabled = existing; $(existing ? '#reserve-client-search' : '#reserve-guest input').focus(); }
     if (['reserve-service', 'reserve-date'].includes(event.target.id)) await loadReserveSlots();
     if (event.target.id === 'reserve-time') updateReserveSummary();
+    if (event.target.id === 'reschedule-date') await loadRescheduleSlots();
+    if (event.target.id === 'reschedule-time') updateRescheduleSummary();
     if (event.target.id === 'date-picker') { const date = event.target.value; if (date < state.today || date > dayAfter(state.today, 90)) throw new Error(h('Choose a date within the next 90 days.')); state.date = date; state.slot = null; await loadSlots(); render(); }
     if (event.target.id === 'repeat-weeks') { state.repeatWeeks = Number(event.target.value); render({selectionOnly:true}); $('#repeat-weeks').focus({preventScroll:true}); }
     if (event.target.id === 'admin-date') { clearBookingLink(); state.adminDate = event.target.value; state.adminFilter = 'all'; updateAdminFilters(); }
@@ -609,6 +668,14 @@ document.addEventListener('submit', async event => {
       closeModal(); state.adminFilter = 'all'; state.adminQuery = ''; state.adminDate = data.date;
       await navigate('/admin'); toast(h('Reservation confirmed.'));
     }
+    if (form.id === 'admin-reschedule-form') {
+      if (!form.slots?.some(s => s.time === data.time) || form.stale) throw new Error(t('Choose an available time.'));
+      try {
+        await api(`/admin/bookings/${encodeURIComponent(form.booking.id)}/reschedule`, 'POST', {...data, expectedVersion:form.booking.schedule_version, expectedStatus:form.booking.status});
+      } catch (error) { await loadRescheduleSlots(form); throw error; }
+      closeModal(); state.adminFilter = 'all'; state.adminQuery = ''; state.adminDate = data.date; state.adminBookingId = null;
+      await navigate('/admin'); toast(h('Appointment time updated.'));
+    }
     if (form.id === 'notification-settings-form') {
       state.admin.notificationSettings = await api('/admin/notification-settings', 'PUT', {language:data.language});
       adminDrafts.delete(form.id); render(); toast(h('Email notification settings saved.'));
@@ -618,7 +685,7 @@ document.addEventListener('submit', async event => {
     if (form.id === 'team-form') { await api('/admin/team', 'PUT', {email: data.email, role: 'admin'}); adminDrafts.delete(form.id); await route(); toast(h('Administrator access granted. They can sign in again now.')); }
     if (form.id === 'prices-form') { state.services = (await api('/admin/prices', 'PUT', { services: state.admin.services.map(s => ({ id: s.id, price: Math.round(Number(data[h`price-${s.id}`]) * 100), outside_price: Math.round(Number(data[h`outside-${s.id}`]) * 100) })) })).services; await route(); toast(h('Your prices have been saved.')); }
   } catch (error) { const current = $('#modal').open ? $('#modal-error') : $('#form-error'); showFormError(current,error.message); }
-  finally { delete form.dataset.submitting; lockedControls.forEach(el => { el.disabled = false; }); if (draftForms.has(form.id)) syncAdminForm(form); if (submit) { submit.disabled = form.id === 'admin-reserve-form' && !form.elements.time.value; submit.removeAttribute('aria-busy'); } if (form.id === 'admin-reserve-form' && form.isConnected) { form.elements.time.disabled = !form.slots?.length; updateReserveSummary(); } }
+  finally { delete form.dataset.submitting; lockedControls.forEach(el => { el.disabled = false; }); if (draftForms.has(form.id)) syncAdminForm(form); if (submit) { submit.disabled = form.id === 'admin-reserve-form' && !form.elements.time.value; submit.removeAttribute('aria-busy'); } if (form.id === 'admin-reserve-form' && form.isConnected) { form.elements.time.disabled = !form.slots?.length; updateReserveSummary(); } if (form.id === 'admin-reschedule-form' && form.isConnected) { form.elements.time.disabled = !form.slots?.length; updateRescheduleSummary(form); } }
 });
 $('#modal').addEventListener('click', event => { if (event.target === $('#modal') && !$('#modal form[data-submitting]')) { const r = $('#modal').getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) closeModal(); } });
 $('#modal').addEventListener('cancel', event => { if ($('#modal form[data-submitting]')) event.preventDefault(); });
