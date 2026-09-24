@@ -1,4 +1,4 @@
-import { albanian } from './locales/sq.js?v=20260924-appointment-updates';
+import { albanian } from './locales/sq.js?v=20260924-form-controls';
 let language = 'sq';
 export const getLanguage = () => language;
 export const locale = () => language === 'sq' ? 'sq-AL' : 'en-GB';

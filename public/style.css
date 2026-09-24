@@ -93,7 +93,8 @@ input,textarea,select {
   border-radius:8px;
   padding:12px 14px;
   color:var(--ink);
-  min-width:0
+  min-width:0;
+  max-width:100%
 }
 
 input:focus,textarea:focus,select:focus {
@@ -109,7 +110,17 @@ input[type=checkbox] {
 }
 
 select {
-  cursor:pointer
+  cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364635d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 14px center;
+  background-size:18px;
+  padding-right:44px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  overflow:hidden
 }
 
 textarea {
@@ -134,7 +145,8 @@ label {
   flex-direction:column;
   gap:9px;
   font-size:14px;
-  font-weight:500
+  font-weight:500;
+  min-width:0
 }
 
 .header {
@@ -1137,7 +1149,7 @@ label {
 
 .repeat-option select {
   margin-left:auto;
-  padding:9px 6px;
+  padding:12px 44px 12px 14px;
   font-size:14px;
   max-width:125px
 }
@@ -1239,7 +1251,7 @@ label {
 
 .field-grid {
   display:grid;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:repeat(2,minmax(0,1fr));
   gap:17px;
   margin-bottom:24px
 }
@@ -2190,7 +2202,7 @@ dialog .modal-description {
 .operations-filters { margin-bottom: 14px; }
 .operations-search { padding: 14px 18px; }
 .language-control { margin: 0; display: inline-flex; }
-.language-control select { width: auto; min-width: 105px; padding: 8px 10px; margin: 0; font-size: 11px; min-height: 36px; background: var(--paper); }
+.language-control select { width: auto; min-width: 105px; padding: 8px 36px 8px 14px; margin: 0; font-size: 16px; min-height: 44px; background-color: var(--paper); }
 html[lang="sq"] .button { letter-spacing: 0; }
 
 /* Editorial palette and touch-first booking. Inter pairs with an open serif face. */
@@ -2220,7 +2232,7 @@ label { font-size: 14px; }
 .header nav a { font-size: 14px; color: #53534d; min-height: 44px; display: flex; align-items: center; }
 .header nav a.active:after { width: 100%; left: 0; height: 1px; border-radius: 0; bottom: 4px; }
 #account-nav { gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.language-control select { min-height: 44px; font-size: 16px; min-width: 92px; padding: 8px 12px; border-radius: 100px; background: transparent; border-color: #aaa79c; }
+.language-control select { height: 44px; min-height: 44px; font-size: 16px; min-width: 104px; padding: 8px 34px 8px 14px; background-position: right 10px center; border-radius: 100px; background-color: transparent; border-color: #aaa79c; }
 .booking-page, .content-page { max-width: 1280px; padding-top: 44px; margin: 0 auto; }
 .page-heading { margin-bottom: 36px; }
 .eyebrow { font-size: 11px; color: var(--gold-dark); letter-spacing: 2px; font-weight: 600; }
@@ -2410,17 +2422,20 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
 @media (max-width: 600px) {
   .header, .booking-page, .content-page, .footer { margin-left: 16px; margin-right: 16px; }
   .header { padding: 14px 0 6px; gap: 8px; }
-  .header-brand-image { width: 140px; }
+  .header-brand-image { width: 124px; }
   .header .button { min-height: 44px; font-size: 14px; padding: 10px 14px; }
   .header .button > span { display: none; }
-  #account-nav { gap: 6px; max-width: calc(100% - 148px); }
-  .language-control select { min-width: 94px; width: 94px; padding: 8px 6px; }
+  #account-nav { gap: 6px; max-width: calc(100% - 132px); flex-wrap: nowrap; margin-left: auto; }
+  .language-control { flex-shrink: 0; }
+  .language-control select { min-width: 104px; width: 104px; }
   .header nav { gap: 0; justify-content: space-between; }
   .header nav a, html[lang="sq"] .header nav a { font-size: 14px; padding: 10px 4px; }
   .account-link { font-size: 13px; }
   .workspace-link { display: none; }
-  .account-link .icon { display: none; }
-  .avatar { width: 44px; height: 44px; }
+  .account-link:not(.workspace-link) { width: 44px; height: 44px; padding: 0; flex-shrink: 0; border: 1px solid var(--border); border-radius: 50%; }
+  .account-link:not(.workspace-link) > span { display: none; }
+  .account-link .icon { display: block; width: 19px; height: 19px; }
+  .avatar { width: 44px; height: 44px; flex-shrink: 0; }
   .booking-page, .content-page { padding-top: 24px; }
   .page-heading, .booking-page > .page-heading { margin-bottom: 24px; }
   .page-heading h1, .booking-page > .page-heading h1 { font-size: 48px; letter-spacing: -2px; line-height: 1.06; margin-bottom: 14px; }
@@ -2599,8 +2614,8 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
 .admin-page .admin-form { max-width: none; padding: 26px; border-radius: 14px; }
 .admin-page label, .admin-dialog label { min-width: 0; }
 .admin-page input:not([type="checkbox"]):not([type="radio"]), .admin-page select, .admin-page textarea,
-.admin-dialog input:not([type="checkbox"]):not([type="radio"]), .admin-dialog select, .admin-dialog textarea { width: 100%; min-height: 46px; border-radius: 8px; font-size: 16px; margin-bottom: 0; }
-.admin-page input:disabled, .admin-page select:disabled { background: #f1f2ef; color: #73786f; opacity: .75; cursor: not-allowed; }
+.admin-dialog input:not([type="checkbox"]):not([type="radio"]), .admin-dialog select, .admin-dialog textarea { width: 100%; min-height: 48px; border-radius: 8px; font-size: 16px; margin-bottom: 0; }
+.admin-page input:disabled, .admin-page select:disabled, .admin-dialog input:disabled, .admin-dialog select:disabled { background-color: #f1f2ef; color: #73786f; opacity: .75; cursor: not-allowed; }
 .admin-page .shift-row { grid-template-columns: minmax(125px,1fr) 125px auto 125px; gap: 12px; }
 .admin-page .shift-row .switch-label { min-height: 44px; cursor: pointer; }
 .shift-closed .switch-label span { color: var(--muted); }
@@ -2659,7 +2674,7 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
   .admin-sidebar { position: static; margin-bottom: 20px; }
   .admin-navigation { display: none; }
   .admin-section-picker { display: flex; font-size: 12px; gap: 6px; }
-  .admin-section-picker select { font-weight: 600; background: white; }
+  .admin-section-picker select { font-weight: 600; background-color: white; }
   .admin-page .workspace-heading { flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
   .admin-page .workspace-heading-actions { width: 100%; }
   .workspace-heading-actions .button-primary { flex: 1; }
@@ -2694,7 +2709,7 @@ dialog .modal-description, .modal-switch, .modal-switch .text-button { font-size
   .workspace-mode .header { padding-bottom: 14px; }
   .admin-page .operations-stats, .admin-page .operations-filters { display: none; }
   .admin-view-picker { display: flex; font-size: 13px; margin-bottom: 14px; }
-  .admin-view-picker select { background: white; }
+  .admin-view-picker select { background-color: white; }
   .admin-page .admin-section-heading p { display: none; }
 }
 .service-translations { margin: 16px 0; border: 1px solid var(--border); border-radius: 10px; padding: 0 14px; }
@@ -2740,4 +2755,50 @@ dialog .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-height: 600px) {
   .admin-dialog-footer { position: static; margin-bottom: 0; }
+}
+
+/* Size native date/time editors explicitly: iOS can otherwise retain their intrinsic width. */
+input:is([type="date"], [type="time"]) {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  text-align: left;
+  overflow: hidden;
+}
+input:is([type="date"], [type="time"])::-webkit-date-and-time-value {
+  min-inline-size: 0;
+  min-block-size: 1.5em;
+  text-align: left;
+}
+input:is([type="date"], [type="time"])::-webkit-datetime-edit {
+  min-inline-size: 0;
+  padding: 0;
+}
+.admin-page input:is([type="date"], [type="time"]),
+.admin-dialog input:is([type="date"], [type="time"]),
+.admin-page select, .admin-dialog select { height: 48px; line-height: 1.5; }
+.date-picker-label input { height: 100%; min-height: 0; }
+.field-grid > * { min-width: 0; }
+.admin-page .field-grid > label, .admin-dialog .field-grid > label, .details-form .field-grid > label { margin: 0; gap: 8px; }
+.admin-dialog .field-grid { gap: 16px; margin-bottom: 20px; align-items: end; }
+.reservation-dialog .reserve-client-modes label { margin-bottom: 0; }
+.reservation-dialog .modal-description { margin-bottom: 20px; }
+.reschedule-notes { display: grid; gap: 8px; margin: 0 0 20px; }
+.reschedule-notes .fine-print { margin: 0; line-height: 1.6; }
+#reschedule-status { margin: 0 0 16px; }
+#reschedule-status:empty { display: none; }
+.reservation-dialog .info-box > div { min-width: 0; overflow-wrap: anywhere; }
+.reservation-footer .button { min-width: 0; }
+.reservation-dialog .reserve-summary:empty { display: none; }
+
+@media (max-width: 340px) {
+  .header .brand { flex-basis: 100%; justify-content: center; }
+  #account-nav { width: 100%; max-width: none; justify-content: center; margin-left: 0; }
+}
+@media (forced-colors: active) {
+  select { -webkit-appearance: auto; appearance: auto; background-image: none; padding-right: 14px; }
 }

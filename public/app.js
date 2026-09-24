@@ -1,6 +1,6 @@
-import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260924-appointment-updates';
-import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260924-appointment-updates';
-import { selectAppointments, matchesClient } from './admin-view.js?v=20260924-appointment-updates';
+import { pages, pagePath, adminPath, legacyPath } from './routes.js?v=20260924-form-controls';
+import { h, t, getLanguage, setLanguage, locale, formatDate } from './i18n.js?v=20260924-form-controls';
+import { selectAppointments, matchesClient } from './admin-view.js?v=20260924-form-controls';
 try { setLanguage(localStorage.getItem('erd-language') || 'sq'); } catch {}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -51,7 +51,7 @@ function updateNav() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.dataset.i18nSource ||= el.innerHTML; const copy = h(el.dataset.i18nSource); if (el.innerHTML !== copy) el.innerHTML = copy; });
   document.querySelectorAll('[data-i18n-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));
   document.querySelectorAll('[data-nav]').forEach(a => { const current = a.dataset.nav === state.route; a.classList.toggle('active', current); current ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
-  const account = languageControl() + (state.user ? h`${isStaff() ? h`<a class="account-link workspace-link" href="/admin">Workspace ${notificationCount()}</a>` : ''}<a class="account-link" href="/appointments">${icon('calendar')}<span>My visits</span></a><button class="avatar" data-action="account" aria-label="Your account">${esc(state.user.name.slice(0, 1))}</button>` : h`<button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button>`);
+  const account = languageControl() + (state.user ? h`${isStaff() ? h`<a class="account-link workspace-link" href="/admin">Workspace ${notificationCount()}</a>` : ''}<a class="account-link" href="/appointments" aria-label="My visits" title="My visits">${icon('calendar')}<span>My visits</span></a><button class="avatar" data-action="account" aria-label="Your account">${esc(state.user.name.slice(0, 1))}</button>` : h`<button class="button button-outline" data-action="login">Sign in <span aria-hidden="true">↗</span></button>`);
   if (account !== accountMarkup) { $('#account-nav').innerHTML = account; accountMarkup = account; }
 }
 function languageControl() { return `<label class="language-control"><span class="sr-only">${t('Language')}</span><select id="language-select" aria-label="${t('Language')}"><option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option><option value="sq" ${getLanguage() === 'sq' ? 'selected' : ''}>Shqip</option></select></label>`; }
@@ -249,10 +249,10 @@ async function adminRescheduleModal(id) {
       <div class="field-grid"><label>Date<input name="date" id="reschedule-date" type="date" value="${booking.date}" min="${state.today}" max="${dayAfter(state.today,90)}" required/></label>
       <label>Time<select name="time" id="reschedule-time" required disabled><option value="">Choose a time</option></select></label></div>
       <p id="reschedule-status" class="fine-print" role="status"></p><button class="text-button" type="button" data-action="reschedule-retry" hidden>Try again</button>
-      <p class="fine-print">The agreed price, duration and approval status stay the same.</p>
+      <div class="reschedule-notes"><p class="fine-print">The agreed price, duration and approval status stay the same.</p>
       ${booking.repeat_weeks ? h('<p class="fine-print">Future repeats will follow the new weekday and time.</p>') : ''}
       <p class="fine-print">${booking.email ? h('The client will receive an email with the updated appointment.') : h('No client email is saved. Please tell the client about the new time.')}</p>
-      <p class="fine-print">All appointment times are in ${esc(state.settings.timezone)}.</p>
+      <p class="fine-print">All appointment times are in ${esc(state.settings.timezone)}.</p></div>
       <div class="reservation-footer"><div id="reschedule-summary" class="reserve-summary" aria-live="polite"></div><p class="form-error" id="modal-error" role="alert"></p>
       <div class="form-footer"><button class="button button-outline" type="button" data-action="modal-close">Keep current time</button><button class="button button-primary" type="submit" disabled>Save new time</button></div></div>
     </form>`);
@@ -287,7 +287,7 @@ async function loadRescheduleSlots(form = $('#admin-reschedule-form')) {
     time.innerHTML += form.slots.map(s => h`<option value="${s.time}">${s.time}${s.outside ? h(' · Outside hours') : ''}</option>`).join('');
     if (form.slots.some(s => s.time === selected)) time.value = selected;
     time.disabled = !form.slots.length;
-    status.textContent = t(result.closed ? 'The salon is taking time off on this date. Please choose another day.' : form.slots.length ? 'Choose a different date or time.' : 'No available times. Choose another date.');
+    status.textContent = t(result.closed ? 'The salon is taking time off on this date. Please choose another day.' : form.slots.length ? '' : 'No available times. Choose another date.');
     updateRescheduleSummary(form);
   } catch (error) {
     if (!form.isConnected || request !== form.slotRequest) return;
@@ -442,7 +442,7 @@ function openModal(content) {
   dialog.innerHTML = h`<button class="modal-close" data-action="modal-close" aria-label="Close dialog">${icon('close')}</button>${content}`;
   if (!dialog.open) dialog.showModal();
   dialog.scrollTop = 0; dialog.scrollLeft = 0;
-  requestAnimationFrame(() => $('input:not([type="hidden"]):not([type="radio"]):not([type="search"]):not(:disabled), select:not(:disabled), .button', dialog)?.focus());
+  requestAnimationFrame(() => $('input:not([type="hidden"]):not([type="radio"]):not([type="search"]):not(:disabled), select:not(:disabled), .button', dialog)?.focus({preventScroll:true}));
 }
 function closeModal() { $('#modal').close(); modalReturnFocus?.focus(); }
 function authModal(mode = 'login') {
